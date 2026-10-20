@@ -1,4 +1,4 @@
-import { FormEvent, useRef, useState } from 'react';
+import React, { FormEvent, useRef, useState } from 'react';
 import { mockReports, Report, ReportPriority, ReportStatus } from './mockData';
 
 type IconName = 'arrow' | 'bell' | 'calendar' | 'camera' | 'check' | 'chevron' | 'clock' | 'file' | 'location' | 'menu' | 'plus' | 'search' | 'upload' | 'wrench' | 'x';
@@ -39,35 +39,47 @@ function Priority({ priority }: { priority: ReportPriority }) {
   return <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><span className={`h-1.5 w-1.5 rounded-full ${tone}`} />{priority}</span>;
 }
 
+function ProductNavbar({ open, onToggle, onClose }: { open: boolean; onToggle: () => void; onClose: () => void }) {
+  const links = [
+    ['Report an issue', '#/report'],
+    ['My reports', '#/reports'],
+    ['How it works', '#/how-it-works'],
+    ['About us', '#/about'],
+  ];
+  return (
+    <>
+      <header className="fixed inset-x-0 top-0 z-30 grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-black/10 bg-[#f4f4f1]/90 px-5 py-4 backdrop-blur-sm sm:px-8 sm:py-5">
+        <a className="flex items-center gap-3 text-[21px] tracking-tight text-black sm:text-[26px]" style={{ fontFamily: 'var(--font-heading)' }} href="/">CampusFix® <span className="select-none text-[25px] tracking-[-0.02em] sm:text-[30px]">✳︎</span></a>
+        <nav className="hidden items-center justify-center text-[16px] text-black md:flex lg:text-[20px]">
+          {links.map(([label, path], index) => <React.Fragment key={path}><a className="transition-opacity hover:opacity-60" href={path}>{label}</a>{index < links.length - 1 && <span aria-hidden="true">, </span>}</React.Fragment>)}
+        </nav>
+        <a className="hidden justify-self-end text-sm text-black underline underline-offset-2 transition-opacity hover:opacity-60 md:block lg:text-[20px]" href="#/contact">Get in touch</a>
+        <button className="col-start-3 justify-self-end md:hidden" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Close menu' : 'Open menu'}>
+          <span className={`block h-[2px] w-6 bg-black transition-transform duration-300 ${open ? 'translate-y-[7px] rotate-45' : ''}`} />
+          <span className={`mt-[5px] block h-[2px] w-6 bg-black transition-opacity duration-300 ${open ? 'opacity-0' : ''}`} />
+          <span className={`mt-[5px] block h-[2px] w-6 bg-black transition-transform duration-300 ${open ? '-translate-y-[7px] -rotate-45' : ''}`} />
+        </button>
+      </header>
+      <div className={`fixed inset-0 z-20 flex flex-col justify-center gap-8 bg-white/95 px-8 backdrop-blur-sm transition-opacity duration-300 md:hidden ${open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`} aria-hidden={!open}>
+        {links.map(([label, path]) => <a className="text-[30px] leading-none" href={path} onClick={onClose} key={path}>{label}</a>)}
+        <a className="text-[30px] leading-none underline underline-offset-4" href="#/contact" onClick={onClose}>Get in touch</a>
+      </div>
+    </>
+  );
+}
+
 function AppShell({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const links = [
-    { label: 'Dashboard', path: '/dashboard', icon: 'file' as IconName },
-    { label: 'My Reports', path: '/reports', icon: 'check' as IconName },
-    { label: 'Report an Issue', path: '/report', icon: 'plus' as IconName },
-  ];
-  const current = window.location.hash.replace('#', '') || '/dashboard';
-  const navigate = (path: string) => { setMobileOpen(false); routeTo(path); };
   return (
-    <div className="campus-product-shell min-h-screen bg-[#f6f7fb] text-[#182033]">
-      {mobileOpen && <button className="fixed inset-0 z-20 bg-slate-950/25 md:hidden" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <aside className={`campus-product-sidebar fixed inset-y-0 left-0 z-30 flex w-[248px] flex-col border-r border-slate-200 bg-white px-4 py-7 transition-transform duration-200 md:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center justify-between px-3">
-          <a className="campus-product-logo flex items-center gap-2.5 text-xl font-extrabold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }} href="#/dashboard">CampusFix®<span className="campus-logo-mark">✳︎</span></a>
-          <button className="text-slate-500 md:hidden" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><Icon name="x" /></button>
+    <div className="campus-product-shell min-h-screen bg-[#f4f4f1] text-black">
+      <ProductNavbar open={mobileOpen} onToggle={() => setMobileOpen((value) => !value)} onClose={() => setMobileOpen(false)} />
+      <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-5 pb-16 pt-32 sm:px-8 md:pt-36">
+        <div className="mb-9 max-w-2xl">
+          <p className="mb-4 text-xs uppercase tracking-[0.16em] text-black/50">CampusFix</p>
+          <h1 className="text-[clamp(34px,5vw,60px)] leading-[1.02] tracking-[-0.045em]" style={{ fontFamily: 'var(--font-heading)' }}>{title}</h1>
+          {subtitle && <p className="mt-5 max-w-xl text-base leading-7 text-black/65 sm:text-lg">{subtitle}</p>}
         </div>
-        <p className="mb-3 mt-12 px-3 text-[10px] font-bold uppercase tracking-[1.1px] text-slate-400">Workspace</p>
-        <nav className="grid gap-1">
-          {links.map((link) => <a key={link.path} href={`#${link.path}`} onClick={() => setMobileOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${current === link.path ? 'bg-[#f1efff] font-semibold text-[#5d45cc]' : 'text-slate-500 hover:bg-slate-50'}`}><Icon name={link.icon} size={19} />{link.label}{link.path === '/reports' && <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">{mockReports.length}</span>}</a>)}
-        </nav>
-        <div className="mt-auto rounded-xl border border-[#e9e5ff] bg-[#f8f7ff] p-4"><div className="mb-3 grid h-8 w-8 place-items-center rounded-lg bg-[#eeeaff] text-[#7257dd]"><Icon name="bell" size={17} /></div><strong className="text-xs">Need a hand?</strong><p className="my-1.5 text-[11px] leading-5 text-slate-500">Our campus support team is here for you.</p><a className="text-[11px] font-bold text-[#5d45cc]" href="mailto:hello@campusfix.co">Visit help center →</a></div>
-      </aside>
-      <main className="min-h-screen md:ml-[248px]">
-        <header className="campus-product-header flex min-h-[82px] items-center justify-between border-b border-slate-200 bg-white/80 px-5 sm:px-8">
-          <div className="flex items-center gap-3"><button className="text-slate-600 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu" size={22} /></button><div><p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Student portal</p><h1 className="font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>{title}</h1></div></div>
-          <div className="flex items-center gap-4"><div className="hidden items-center gap-2 rounded-lg bg-[#f6f7fb] px-3 py-2 text-slate-400 sm:flex"><Icon name="search" size={17} /><input className="w-36 bg-transparent text-xs outline-none placeholder:text-slate-400" placeholder="Search reports..." /></div><button className="relative text-slate-500" aria-label="Notifications"><Icon name="bell" size={20} /><span className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-[#7257dd]" /></button><div className="flex items-center gap-2"><div className="grid h-8 w-8 place-items-center rounded-full bg-[#e5e1ff] text-[11px] font-bold text-[#5342a5]">AR</div><div className="hidden sm:block"><strong className="block text-xs">Alex Rivera</strong><span className="text-[10px] text-slate-400">Computer Science</span></div></div></div>
-        </header>
-        <div className="mx-auto max-w-[1350px] px-5 py-8 sm:px-8 sm:py-10">{subtitle && <p className="mb-7 text-sm text-slate-500">{subtitle}</p>}{children}</div>
+        {children}
       </main>
     </div>
   );
@@ -111,7 +123,7 @@ export function ReportIssuePage() {
   const [submitted, setSubmitted] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setSubmitted(true); };
-  return <AppShell title="Report an Issue" subtitle="Give us a few details and the right campus team can take a look."><div className="mx-auto max-w-3xl"><div className="mb-7"><h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>What needs fixing?</h2><p className="mt-2 text-sm text-slate-500">This is a mock form for now. Your report will not be submitted to a backend.</p></div>{submitted && <div className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-700"><Icon name="check" size={16} />Thanks — your draft report is ready for review. Nothing has been saved.</div>}<form className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" onSubmit={handleSubmit}><div className="grid gap-5 sm:grid-cols-2"><label className="grid gap-2 text-xs font-semibold text-slate-700">Category<select required className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-[#7257dd]"><option value="">Choose a category</option><option>Plumbing</option><option>Electrical</option><option>Equipment</option><option>Cleanliness</option><option>Safety</option><option>Other</option></select></label><label className="grid gap-2 text-xs font-semibold text-slate-700">Campus location<input required className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="e.g. West Hall, Room 302" /></label></div><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Issue title<input required className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Briefly describe the issue" /></label><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Description<textarea required rows={5} className="resize-y rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Add helpful details, such as when it started or who it affects." /></label><div className="mt-5"><span className="mb-2 block text-xs font-semibold text-slate-700">Photo <span className="font-normal text-slate-400">(optional)</span></span><input ref={fileRef} className="hidden" type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name || '')} /><button type="button" className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-5 py-8 text-center text-xs text-slate-500 hover:border-[#7257dd] hover:bg-[#fbfaff]" onClick={() => fileRef.current?.click()}><span className="grid h-9 w-9 place-items-center rounded-full bg-[#eeeaff] text-[#7257dd]"><Icon name={fileName ? 'check' : 'upload'} size={17} /></span><strong className="text-slate-700">{fileName || 'Upload a photo'}</strong><span>PNG, JPG or WEBP up to 10MB</span></button></div><div className="mt-7 flex justify-end gap-3"><ActionButton secondary onClick={() => routeTo('/dashboard')}>Cancel</ActionButton><ActionButton><Icon name="arrow" size={16} />Review report</ActionButton></div></form></div></AppShell>;
+  return <AppShell title="Report an Issue" subtitle="Give us a few details and the right campus team can take a look."><div className="mx-auto max-w-3xl"><div className="mb-5"><h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>What needs fixing?</h2><p className="mt-2 text-sm text-slate-500">This is a mock form for now. Your report will not be submitted to a backend.</p></div>{submitted && <div className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-700"><Icon name="check" size={16} />Thanks — your draft report is ready for review. Nothing has been saved.</div>}<form className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" onSubmit={handleSubmit}><div className="grid gap-5 sm:grid-cols-2"><label className="grid gap-2 text-xs font-semibold text-slate-700">Category<select required className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-[#7257dd]"><option value="">Choose a category</option><option>Plumbing</option><option>Electrical</option><option>Equipment</option><option>Cleanliness</option><option>Safety</option><option>Other</option></select></label><label className="grid gap-2 text-xs font-semibold text-slate-700">Campus location<input required className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="e.g. West Hall, Room 302" /></label></div><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Issue title<input required className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Briefly describe the issue" /></label><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Description<textarea required rows={5} className="resize-y rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Add helpful details, such as when it started or who it affects." /></label><div className="mt-5"><span className="mb-2 block text-xs font-semibold text-slate-700">Photo <span className="font-normal text-slate-400">(optional)</span></span><input ref={fileRef} className="hidden" type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name || '')} /><button type="button" className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-5 py-8 text-center text-xs text-slate-500 hover:border-[#7257dd] hover:bg-[#fbfaff]" onClick={() => fileRef.current?.click()}><span className="grid h-9 w-9 place-items-center rounded-full bg-[#eeeaff] text-[#7257dd]"><Icon name={fileName ? 'check' : 'upload'} size={17} /></span><strong className="text-slate-700">{fileName || 'Upload a photo'}</strong><span>PNG, JPG or WEBP up to 10MB</span></button></div><div className="mt-7 flex justify-end gap-3"><ActionButton secondary onClick={() => routeTo('/dashboard')}>Cancel</ActionButton><ActionButton><Icon name="arrow" size={16} />Review report</ActionButton></div></form></div></AppShell>;
 }
 
 function ReportDetailPage({ report }: { report: Report }) {

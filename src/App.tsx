@@ -5,11 +5,16 @@ const VIDEO_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260530_042513_df96a13b-6155-4f6e-8b93-c9dee66fba08.mp4';
 const SENSITIVITY = 0.8;
 
-function useTypewriter(text: string, speed = 38, startDelay = 600) {
+function useTypewriter(text: string, speed = 38, startDelay = 600, reducedMotion = false) {
   const [displayed, setDisplayed] = useState('');
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    if (reducedMotion) {
+      setDisplayed(text);
+      setDone(true);
+      return;
+    }
     let interval: number | undefined;
     const delay = window.setTimeout(() => {
       let index = 0;
@@ -27,7 +32,7 @@ function useTypewriter(text: string, speed = 38, startDelay = 600) {
       window.clearTimeout(delay);
       if (interval) window.clearInterval(interval);
     };
-  }, [speed, startDelay, text]);
+  }, [reducedMotion, speed, startDelay, text]);
 
   return { displayed, done };
 }
@@ -116,8 +121,14 @@ function LandingPage() {
   const seeking = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [actionsVisible, setActionsVisible] = useState(false);
+  const [videoUnavailable, setVideoUnavailable] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState('');
+  const [reducedMotion, setReducedMotion] = useState(false);
   const { displayed, done } = useTypewriter(
-    'Glad you stopped in. Good taste tends to find us. Now, what are we fixing?',
+    'Glad you stopped in. Good systems make better campuses. Now, what are we fixing?',
+    38,
+    600,
+    reducedMotion,
   );
 
   const seekVideo = useCallback(() => {
@@ -133,7 +144,18 @@ function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMotionPreference = () => setReducedMotion(mediaQuery.matches);
+    updateMotionPreference();
+    mediaQuery.addEventListener('change', updateMotionPreference);
+    return () => mediaQuery.removeEventListener('change', updateMotionPreference);
+  }, []);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setActionsVisible(true), 400);
+    if (reducedMotion) {
+      return () => window.clearTimeout(timer);
+    }
     const handleMouseMove = (event: MouseEvent) => {
       const video = videoRef.current;
       if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
@@ -157,22 +179,31 @@ function LandingPage() {
       window.removeEventListener('mousemove', handleMouseMove);
       videoRef.current?.removeEventListener('seeked', handleSeeked);
     };
-  }, [seekVideo]);
+  }, [reducedMotion, seekVideo]);
 
   const copyEmail = async () => {
-    await navigator.clipboard.writeText('hello@campusfix.co');
+    try {
+      await navigator.clipboard.writeText('hello@campusfix.co');
+      setCopyFeedback('Email copied');
+    } catch {
+      setCopyFeedback('Copy unavailable');
+    }
+    window.setTimeout(() => setCopyFeedback(''), 2200);
   };
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#d9f0ff] text-black">
-      <video ref={videoRef} className="fixed inset-0 z-0 h-full w-full object-cover object-[70%_center]" muted playsInline preload="auto">
+      {!videoUnavailable && <video ref={videoRef} onError={() => setVideoUnavailable(true)} className="fixed inset-0 z-0 h-full w-full object-cover object-[70%_center]" muted playsInline preload="auto">
         <source src={VIDEO_URL} type="video/mp4" />
-      </video>
-      <div className="fixed inset-0 z-0 bg-[#d9f0ff]/45" />
+      </video>}
+      <div className="fixed inset-0 z-0 bg-[#d9f0ff]/55" />
       <Navbar menuOpen={menuOpen} onMenuToggle={() => setMenuOpen((open) => !open)} />
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <section className="relative z-[1] flex min-h-screen items-end overflow-hidden px-5 pb-12 pt-28 sm:px-8 sm:pb-16 md:items-center md:px-10 md:pb-0">
         <div className="relative z-10 max-w-xl">
+          <p className="pointer-events-none mb-5 select-none whitespace-pre-line text-[clamp(18px,4vw,26px)] font-normal leading-[1.3] text-black blur-[1px] sm:mb-6">
+            {'Hey there, meet CampusFix,\nYour campus issue-resolution companion'}
+          </p>
           <h1 className="mb-4 max-w-lg text-[clamp(30px,6vw,58px)] font-medium leading-[1.05] tracking-[-0.04em] text-black drop-shadow-[0_1px_1px_rgba(255,255,255,0.6)]">
             Make campus work better.
           </h1>
@@ -191,6 +222,7 @@ function LandingPage() {
               <CopyIcon />
             </button>
           </div>
+          {copyFeedback && <p className="mt-2 text-xs text-black/75" role="status">{copyFeedback}</p>}
         </div>
       </section>
     </main>

@@ -68,8 +68,8 @@ function ProductNavbar({ open, onToggle, onClose }: { open: boolean; onToggle: (
   );
 }
 
-function AppShell({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+export function AppShell({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
+const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <div className="campus-product-shell min-h-screen bg-[#f4f4f1] text-black">
       <ProductNavbar open={mobileOpen} onToggle={() => setMobileOpen((value) => !value)} onClose={() => setMobileOpen(false)} />

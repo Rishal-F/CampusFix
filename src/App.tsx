@@ -1,3 +1,4 @@
+import AdminDashboard from './admin/AdminDashboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AboutPage, AdminDashboardPage, ContactPage, DashboardPage, HowItWorksPage, MyReportsPage, ReportIssuePage } from './student/StudentPages';
 
@@ -47,12 +48,17 @@ function CopyIcon() {
 }
 
 export function App() {
-  const [route, setRoute] = useState(window.location.hash.replace('#', '') || '/');
+  const getRoute = () => window.location.hash.replace('#', '') || window.location.pathname || '/';
+  const [route, setRoute] = useState(getRoute);
 
   useEffect(() => {
-    const handleHashChange = () => setRoute(window.location.hash.replace('#', '') || '/');
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const handleLocationChange = () => setRoute(getRoute());
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
   }, []);
 
   if (route === '/dashboard') return <DashboardPage />;
@@ -61,7 +67,7 @@ export function App() {
   if (route === '/how-it-works') return <HowItWorksPage />;
   if (route === '/about') return <AboutPage />;
   if (route === '/contact') return <ContactPage />;
-  if (route === '/admin' || route.startsWith('/admin/')) return <AdminDashboardPage />;
+  if (route === '/admin' || route.startsWith('/admin/')) return <AdminDashboard />;
   return <LandingPage />;
 }
 

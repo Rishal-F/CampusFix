@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from './api/client';
+import { AuthPanel } from './auth/AuthPanel.jsx';
 import { AboutPage, AdminDashboardPage, ContactPage, DashboardPage, HowItWorksPage, MyReportsPage, ReportIssuePage } from './student/StudentPages';
 
 const VIDEO_URL =
@@ -48,6 +50,8 @@ function CopyIcon() {
 
 export function App() {
   const [route, setRoute] = useState(window.location.hash.replace('#', '') || '/');
+  const [user, setUser] = useState<unknown>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const handleHashChange = () => setRoute(window.location.hash.replace('#', '') || '/');
@@ -55,14 +59,77 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  if (route === '/dashboard') return <DashboardPage />;
-  if (route === '/report') return <ReportIssuePage />;
-  if (route === '/reports' || route.startsWith('/reports/')) return <MyReportsPage />;
-  if (route === '/how-it-works') return <HowItWorksPage />;
-  if (route === '/about') return <AboutPage />;
-  if (route === '/contact') return <ContactPage />;
-  if (route === '/admin' || route.startsWith('/admin/')) return <AdminDashboardPage />;
-  return <LandingPage />;
+  useEffect(() => {
+    let active = true;
+    api.me()
+      .then((result) => {
+        if (active) setUser(result.user);
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setAuthChecked(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const requiresAuth = route === '/report' || route === '/reports' || route.startsWith('/reports/');
+
+  if (!authChecked) {
+    return <main className="grid min-h-screen place-items-center bg-[#f4f4f1] text-sm text-slate-500">Checking your session...</main>;
+  }
+
+  if (requiresAuth && !user) {
+    return <AuthPanel onLogin={(authenticatedUser: unknown) => {
+      setUser(authenticatedUser);
+      window.location.hash = route;
+    }} />;
+  }
+
+  const page = route === '/dashboard'
+    ? <DashboardPage />
+    : route === '/report'
+      ? <ReportIssuePage onAuthRequired={() => setUser(null)} />
+      : route === '/reports' || route.startsWith('/reports/')
+        ? <MyReportsPage />
+        : route === '/how-it-works'
+          ? <HowItWorksPage />
+          : route === '/about'
+            ? <AboutPage />
+            : route === '/contact'
+              ? <ContactPage />
+              : route === '/admin' || route.startsWith('/admin/')
+                ? <AdminDashboardPage />
+                : <LandingPage />;
+
+  async function handleLogout() {
+    try {
+      await api.logout();
+      setUser(null);
+      window.location.hash = '/';
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  }
+
+  return (
+    <>
+      {user && (
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="fixed right-5 top-20 z-40 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 md:top-5"
+        >
+          Sign out
+        </button>
+      )}
+      {page}
+    </>
+  );
 }
 
 function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -88,18 +155,15 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 function Navbar({ menuOpen, onMenuToggle }: { menuOpen: boolean; onMenuToggle: () => void }) {
   return (
-    <header className="fixed inset-x-0 top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-4 bg-white/30 px-5 py-4 backdrop-blur-[2px] sm:px-8 sm:py-5">
+    <header className="fixed inset-x-0 top-0 z-10 grid grid-cols-[auto_1fr_auto] items-center gap-5 bg-white/30 px-5 py-4 pr-5 backdrop-blur-[2px] sm:px-8 sm:py-5 md:pr-32">
       <a className="flex items-center gap-3 text-[21px] tracking-tight sm:text-[26px]" href="/" style={{ fontFamily: 'var(--font-heading)' }}>
         <span>CampusFix®</span>
         <span className="select-none text-[25px] tracking-[-0.02em] sm:text-[30px]" aria-hidden="true">✳︎</span>
       </a>
-      <nav className="hidden items-center justify-center gap-1 text-[18px] text-black md:flex xl:text-[21px]">
+      <nav className="hidden items-center justify-center gap-5 text-[16px] text-black md:flex lg:gap-7 xl:text-[21px]">
         <a className="transition-opacity hover:opacity-60" href="#/report">Report an issue</a>
-        <span aria-hidden="true">,</span>
         <a className="transition-opacity hover:opacity-60" href="#/reports">My reports</a>
-        <span aria-hidden="true">,</span>
         <a className="transition-opacity hover:opacity-60" href="#/how-it-works">How it works</a>
-        <span aria-hidden="true">,</span>
         <a className="transition-opacity hover:opacity-60" href="#/about">About us</a>
       </nav>
       <a className="hidden justify-self-end text-sm text-black underline underline-offset-2 transition-opacity hover:opacity-60 sm:text-lg md:block lg:text-[21px]" href="mailto:hello@campusfix.co">

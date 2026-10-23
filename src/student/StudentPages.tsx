@@ -1,4 +1,5 @@
-import React, { FormEvent, useRef, useState } from 'react';
+import React, { FormEvent, useEffect, useRef, useState } from 'react';
+import { api } from '../api/client';
 import { mockReports, Report, ReportPriority, ReportStatus } from './mockData';
 
 type IconName = 'arrow' | 'bell' | 'calendar' | 'camera' | 'check' | 'chevron' | 'clock' | 'file' | 'location' | 'menu' | 'plus' | 'search' | 'upload' | 'wrench' | 'x';
@@ -35,7 +36,7 @@ function StatusBadge({ status }: { status: ReportStatus }) {
 }
 
 function Priority({ priority }: { priority: ReportPriority }) {
-  const tone = priority === 'High' ? 'bg-red-500' : priority === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500';
+  const tone = priority === 'Urgent' || priority === 'High' ? 'bg-red-500' : priority === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500';
   return <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><span className={`h-1.5 w-1.5 rounded-full ${tone}`} />{priority}</span>;
 }
 
@@ -48,10 +49,10 @@ function ProductNavbar({ open, onToggle, onClose }: { open: boolean; onToggle: (
   ];
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-30 grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-black/10 bg-[#f4f4f1]/90 px-5 py-4 backdrop-blur-sm sm:px-8 sm:py-5">
+      <header className="fixed inset-x-0 top-0 z-30 grid grid-cols-[auto_1fr_auto] items-center gap-5 border-b border-black/10 bg-[#f4f4f1]/90 px-5 py-4 backdrop-blur-sm sm:px-8 sm:py-5 md:pr-32">
         <a className="flex items-center gap-3 text-[21px] tracking-tight text-black sm:text-[26px]" style={{ fontFamily: 'var(--font-heading)' }} href="/">CampusFix® <span className="select-none text-[25px] tracking-[-0.02em] sm:text-[30px]">✳︎</span></a>
-        <nav className="hidden items-center justify-center text-[16px] text-black md:flex lg:text-[20px]">
-          {links.map(([label, path], index) => <React.Fragment key={path}><a className="transition-opacity hover:opacity-60" href={path}>{label}</a>{index < links.length - 1 && <span aria-hidden="true">, </span>}</React.Fragment>)}
+        <nav className="hidden items-center justify-center gap-5 text-[16px] text-black md:flex lg:gap-7 lg:text-[20px]">
+          {links.map(([label, path]) => <a className="whitespace-nowrap transition-opacity hover:opacity-60" href={path} key={path}>{label}</a>)}
         </nav>
         <a className="hidden justify-self-end text-sm text-black underline underline-offset-2 transition-opacity hover:opacity-60 md:block lg:text-[20px]" href="#/contact">Get in touch</a>
         <button className="col-start-3 justify-self-end md:hidden" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Close menu' : 'Open menu'}>
@@ -90,8 +91,46 @@ function ActionButton({ children, onClick, secondary = false }: { children: Reac
 }
 
 export function DashboardPage() {
-  const summary = [{ label: 'Total reports', value: '12', note: '+2 this month', icon: 'file' as IconName }, { label: 'Pending', value: '03', note: 'Needs review', icon: 'clock' as IconName }, { label: 'In progress', value: '05', note: 'Being worked on', icon: 'wrench' as IconName }, { label: 'Resolved', value: '04', note: '+12% this month', icon: 'check' as IconName }];
-  return <AppShell title="Dashboard" subtitle="Keep your campus running smoothly. Track your submitted issues and stay up to date."><section className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Tuesday, October 22, 2024</p><h2 className="text-2xl font-bold tracking-tight sm:text-[27px]" style={{ fontFamily: 'var(--font-heading)' }}>Good morning, Alex <span className="text-[#7257dd]">✦</span></h2></div><ActionButton onClick={() => routeTo('/report')}><Icon name="plus" size={17} />Report an Issue</ActionButton></section><section className="mb-10 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">{summary.map((item) => <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" key={item.label}><div className="mb-4 grid h-9 w-9 place-items-center rounded-lg bg-[#eeeaff] text-[#7257dd]"><Icon name={item.icon} size={18} /></div><p className="mb-1.5 text-xs text-slate-500">{item.label}</p><strong className="block text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>{item.value}</strong><span className="text-[10px] font-semibold text-emerald-600">{item.note}</span></div>)}</section><section><div className="mb-4 flex items-end justify-between"><div><h2 className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>Recent issues</h2><p className="mt-1 text-xs text-slate-500">Track the latest updates on your submitted reports.</p></div><a className="hidden items-center gap-1 text-xs font-bold text-[#5d45cc] sm:flex" href="#/reports">View all reports <Icon name="arrow" size={15} /></a></div><ReportTable reports={mockReports.slice(0, 3)} /></section></AppShell>;
+  const [reports, setReports] = useState<Report[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [retryToken, setRetryToken] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setErrorMessage('');
+
+    api.listIssues()
+      .then((result: { issues: ApiIssue[] }) => {
+        if (active) setReports(result.issues.map(mapIssueToReport));
+      })
+      .catch((error) => {
+        if (!active) return;
+        setErrorMessage(error instanceof Error && error.message.includes('401')
+          ? 'Your session may have expired. Please sign in again to view your dashboard.'
+          : error instanceof Error
+            ? error.message
+            : 'Unable to load your dashboard. Please try again.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [retryToken]);
+
+  const summary = [
+    { label: 'Total reports', value: reports.length, note: 'All submitted issues', icon: 'file' as IconName },
+    { label: 'Pending', value: reports.filter((report) => report.status === 'Pending').length, note: 'Needs review', icon: 'clock' as IconName },
+    { label: 'In progress', value: reports.filter((report) => report.status === 'In progress').length, note: 'Being worked on', icon: 'wrench' as IconName },
+    { label: 'Resolved', value: reports.filter((report) => report.status === 'Resolved').length, note: 'Completed issues', icon: 'check' as IconName },
+  ];
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  return <AppShell title="Dashboard" subtitle="Keep your campus running smoothly. Track your submitted issues and stay up to date."><section className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{today}</p><h2 className="text-2xl font-bold tracking-tight sm:text-[27px]" style={{ fontFamily: 'var(--font-heading)' }}>Your campus overview <span className="text-[#7257dd]">✦</span></h2></div><ActionButton onClick={() => routeTo('/report')}><Icon name="plus" size={17} />Report an Issue</ActionButton></section>{isLoading ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">Loading your dashboard...</div> : errorMessage ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><p>{errorMessage}</p><div className="mt-4 flex flex-wrap gap-3"><ActionButton secondary onClick={() => setRetryToken((value) => value + 1)}>Try again</ActionButton>{errorMessage.includes('session') && <ActionButton onClick={() => routeTo('/report')}>Sign in again</ActionButton>}</div></div> : <><section className="mb-10 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">{summary.map((item) => <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" key={item.label}><div className="mb-4 grid h-9 w-9 place-items-center rounded-lg bg-[#eeeaff] text-[#7257dd]"><Icon name={item.icon} size={18} /></div><p className="mb-1.5 text-xs text-slate-500">{item.label}</p><strong className="block text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>{item.value}</strong><span className="text-[10px] font-semibold text-emerald-600">{item.note}</span></div>)}</section><section><div className="mb-4 flex items-end justify-between"><div><h2 className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>Recent issues</h2><p className="mt-1 text-xs text-slate-500">Track the latest updates on your submitted reports.</p></div><a className="hidden items-center gap-1 text-xs font-bold text-[#5d45cc] sm:flex" href="#/reports">View all reports <Icon name="arrow" size={15} /></a></div>{reports.length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm"><h2 className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>No reports yet</h2><p className="mt-2 text-sm text-slate-500">Submit an issue and it will appear on your dashboard once saved.</p><div className="mt-5"><ActionButton onClick={() => routeTo('/report')}><Icon name="plus" size={16} />Report an Issue</ActionButton></div></div> : <ReportTable reports={reports.slice(0, 3)} />}</section></>}</AppShell>;
 }
 
 function ReportTable({ reports, admin = false }: { reports: Report[]; admin?: boolean }) {
@@ -111,19 +150,159 @@ function ReportTable({ reports, admin = false }: { reports: Report[]; admin?: bo
   </div>;
 }
 
-export function MyReportsPage() {
-  const reportId = window.location.hash.split('/')[2];
-  const selected = mockReports.find((report) => report.id === reportId);
-  if (selected) return <ReportDetailPage report={selected} />;
-  return <AppShell title="My Reports" subtitle="A complete history of the issues you have reported on campus."><div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>Report history</h2><p className="mt-1 text-xs text-slate-500">Mock records for this frontend stage. Nothing is saved to a backend.</p></div><ActionButton onClick={() => routeTo('/report')}><Icon name="plus" size={16} />Report an Issue</ActionButton></div><ReportTable reports={mockReports} /></AppShell>;
+type ApiIssue = {
+  id: number;
+  title: string;
+  description: string;
+  category: string;
+  location: string;
+  priority: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+function formatIssueDate(value?: string) {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function ReportIssuePage() {
+function mapIssueToReport(issue: ApiIssue): Report {
+  const status: ReportStatus = issue.status === 'reported'
+    ? 'Pending'
+    : issue.status === 'assigned' || issue.status === 'in_progress'
+      ? 'In progress'
+      : issue.status === 'resolved' || issue.status === 'closed'
+        ? 'Resolved'
+        : 'Unknown';
+  const normalizedPriority = issue.priority
+    ? issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)
+    : '';
+  const priority: ReportPriority = normalizedPriority === 'Low' || normalizedPriority === 'Medium' || normalizedPriority === 'High' || normalizedPriority === 'Urgent'
+    ? normalizedPriority
+    : 'Not available';
+
+  return {
+    id: String(issue.id),
+    title: issue.title,
+    category: issue.category,
+    location: issue.location,
+    submitted: formatIssueDate(issue.created_at),
+    priority,
+    status,
+    description: issue.description,
+  };
+}
+
+export function MyReportsPage() {
+  const reportId = window.location.hash.split('/')[2];
+  const [reports, setReports] = useState<Report[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setErrorMessage('');
+
+    api.listIssues()
+      .then((result: { issues: ApiIssue[] }) => {
+        if (active) setReports(result.issues.map(mapIssueToReport));
+      })
+      .catch((error) => {
+        if (!active) return;
+        setErrorMessage(error instanceof Error && error.message.includes('401')
+          ? 'Your session has expired. Please sign in again to view your reports.'
+          : error instanceof Error
+            ? error.message
+            : 'Unable to load your reports. Please try again.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const selected = reports.find((report) => report.id === reportId);
+  if (selected) return <ReportDetailPage report={selected} />;
+
+  return <AppShell title="My Reports" subtitle="A complete history of the issues you have reported on campus."><div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>Report history</h2><p className="mt-1 text-xs text-slate-500">Reports saved to your CampusFix account.</p></div><ActionButton onClick={() => routeTo('/report')}><Icon name="plus" size={16} />Report an Issue</ActionButton></div>{isLoading ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">Loading your reports...</div> : errorMessage ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">{errorMessage}</div> : reports.length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm"><h2 className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>No reports yet</h2><p className="mt-2 text-sm text-slate-500">Submit an issue and it will appear here once saved.</p><div className="mt-5"><ActionButton onClick={() => routeTo('/report')}><Icon name="plus" size={16} />Report an Issue</ActionButton></div></div> : <ReportTable reports={reports} />}</AppShell>;
+}
+
+export function ReportIssuePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [fileName, setFileName] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [location, setLocation] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setSubmitted(true); };
-  return <AppShell title="Report an Issue" subtitle="Give us a few details and the right campus team can take a look."><div className="mx-auto max-w-3xl"><div className="mb-5"><h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>What needs fixing?</h2><p className="mt-2 text-sm text-slate-500">This is a mock form for now. Your report will not be submitted to a backend.</p></div>{submitted && <div className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-700"><Icon name="check" size={16} />Thanks — your draft report is ready for review. Nothing has been saved.</div>}<form className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" onSubmit={handleSubmit}><div className="grid gap-5 sm:grid-cols-2"><label className="grid gap-2 text-xs font-semibold text-slate-700">Category<select required className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-[#7257dd]"><option value="">Choose a category</option><option>Plumbing</option><option>Electrical</option><option>Equipment</option><option>Cleanliness</option><option>Safety</option><option>Other</option></select></label><label className="grid gap-2 text-xs font-semibold text-slate-700">Campus location<input required className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="e.g. West Hall, Room 302" /></label></div><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Issue title<input required className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Briefly describe the issue" /></label><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Description<textarea required rows={5} className="resize-y rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Add helpful details, such as when it started or who it affects." /></label><div className="mt-5"><span className="mb-2 block text-xs font-semibold text-slate-700">Photo <span className="font-normal text-slate-400">(optional)</span></span><input ref={fileRef} className="hidden" type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name || '')} /><button type="button" className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-5 py-8 text-center text-xs text-slate-500 hover:border-[#7257dd] hover:bg-[#fbfaff]" onClick={() => fileRef.current?.click()}><span className="grid h-9 w-9 place-items-center rounded-full bg-[#eeeaff] text-[#7257dd]"><Icon name={fileName ? 'check' : 'upload'} size={17} /></span><strong className="text-slate-700">{fileName || 'Upload a photo'}</strong><span>PNG, JPG or WEBP up to 10MB</span></button></div><div className="mt-7 flex justify-end gap-3"><ActionButton secondary onClick={() => routeTo('/dashboard')}>Cancel</ActionButton><ActionButton><Icon name="arrow" size={16} />Review report</ActionButton></div></form></div></AppShell>;
+  const categories = ['Electrical', 'Plumbing', 'Cleaning', 'Furniture', 'Network', 'Other'] as const;
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSuccessMessage('');
+    setErrorMessage('');
+
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim();
+    const trimmedLocation = location.trim();
+
+    if (trimmedTitle.length < 4 || trimmedTitle.length > 160) {
+      setErrorMessage('Title must be between 4 and 160 characters.');
+      return;
+    }
+    if (trimmedDescription.length < 10 || trimmedDescription.length > 5000) {
+      setErrorMessage('Description must be between 10 and 5,000 characters.');
+      return;
+    }
+    if (!categories.includes(category as typeof categories[number])) {
+      setErrorMessage('Choose one of the available issue categories.');
+      return;
+    }
+    if (trimmedLocation.length < 2 || trimmedLocation.length > 180) {
+      setErrorMessage('Location must be between 2 and 180 characters.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.createIssue({
+        title: trimmedTitle,
+        description: trimmedDescription,
+        category,
+        location: trimmedLocation,
+      });
+      setSuccessMessage('Report submitted successfully. The issue has been saved.');
+      setTitle('');
+      setDescription('');
+      setCategory('');
+      setLocation('');
+      setFileName('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('401')) {
+        onAuthRequired?.();
+      }
+      setErrorMessage(message.includes('401')
+        ? 'You must be signed in as a student to submit a report.'
+        : error instanceof TypeError
+          ? 'Network error: unable to reach CampusFix. Check your connection and try again.'
+        : message || 'Unable to submit the report. Check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return <AppShell title="Report an Issue" subtitle="Give us a few details and the right campus team can take a look."><div className="mx-auto max-w-3xl"><div className="mb-5"><h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>What needs fixing?</h2><p className="mt-2 text-sm text-slate-500">Share the details below so the right campus team can take a look.</p></div>{successMessage && <div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-700"><Icon name="check" size={16} />{successMessage}</div>}{errorMessage && <div role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">{errorMessage}</div>}<form noValidate className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" onSubmit={handleSubmit}><div className="grid gap-5 sm:grid-cols-2"><label className="grid gap-2 text-xs font-semibold text-slate-700">Category<select required value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-[#7257dd]"><option value="">Choose a category</option>{categories.map((option) => <option key={option}>{option}</option>)}</select></label><label className="grid gap-2 text-xs font-semibold text-slate-700">Campus location<input required minLength={2} maxLength={180} value={location} onChange={(event) => setLocation(event.target.value)} className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="e.g. West Hall, Room 302" /></label></div><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Issue title<input required minLength={4} maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Briefly describe the issue" /></label><label className="mt-5 grid gap-2 text-xs font-semibold text-slate-700">Description<textarea required minLength={10} maxLength={5000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className="resize-y rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none placeholder:text-slate-400 focus:border-[#7257dd]" placeholder="Add helpful details, such as when it started or who it affects." /></label><div className="mt-5"><span className="mb-2 block text-xs font-semibold text-slate-700">Photo <span className="font-normal text-slate-400">(optional)</span></span><input ref={fileRef} className="hidden" type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name || '')} /><button type="button" className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-5 py-8 text-center text-xs text-slate-500 hover:border-[#7257dd] hover:bg-[#fbfaff]" onClick={() => fileRef.current?.click()}><span className="grid h-9 w-9 place-items-center rounded-full bg-[#eeeaff] text-[#7257dd]"><Icon name={fileName ? 'check' : 'upload'} size={17} /></span><strong className="text-slate-700">{fileName || 'Upload a photo'}</strong><span>Photo selection is not uploaded yet. PNG, JPG or WEBP up to 10MB</span></button></div><div className="mt-7 flex justify-end gap-3"><ActionButton secondary onClick={() => routeTo('/dashboard')}>Cancel</ActionButton><button type="submit" disabled={isSubmitting} aria-busy={isSubmitting} className="campus-pill-button inline-flex items-center justify-center gap-2 rounded-full bg-[#7257dd] px-4 py-2.5 text-xs font-bold text-white shadow-sm shadow-[#7257dd]/20 transition-colors hover:bg-[#5d45cc] disabled:cursor-not-allowed disabled:opacity-60"><Icon name="arrow" size={16} />{isSubmitting ? 'Submitting...' : 'Submit report'}</button></div></form></div></AppShell>;
 }
 
 function ReportDetailPage({ report }: { report: Report }) {

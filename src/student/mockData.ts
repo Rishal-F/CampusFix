@@ -1,5 +1,5 @@
-export type ReportStatus = 'Pending' | 'In progress' | 'Resolved';
-export type ReportPriority = 'Low' | 'Medium' | 'High';
+export type ReportStatus = 'Pending' | 'In progress' | 'Resolved' | 'Unknown';
+export type ReportPriority = 'Low' | 'Medium' | 'High' | 'Urgent' | 'Not available';
 
 export type Report = {
   id: string;

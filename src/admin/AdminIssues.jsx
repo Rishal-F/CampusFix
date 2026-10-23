@@ -1,74 +1,116 @@
-
 import { useState } from "react";
-import { departments, statuses } from "./adminMockData";
 
-const priorities = ["Low", "Medium", "High"];
-const ESCALATION_HOURS = 48;
+const STATUSES = [
+  ["reported", "Reported"],
+  ["assigned", "Assigned"],
+  ["in_progress", "In progress"],
+  ["resolved", "Resolved"],
+  ["closed", "Closed"],
+];
+const PRIORITIES = ["low", "medium", "high", "urgent"];
+const NEXT_STATUSES = {
+  reported: ["assigned", "in_progress", "closed"],
+  assigned: ["in_progress", "closed"],
+  in_progress: ["assigned", "closed"],
+  resolved: ["closed"],
+  closed: [],
+};
 
-function needsEscalation(issue) {
-  if (issue.priority !== "High" || issue.status === "Resolved") {
-    return false;
-  }
-
-  const submitted = new Date(issue.date);
-  if (Number.isNaN(submitted.getTime())) return false;
-
-  const hoursOpen = (Date.now() - submitted.getTime()) / 3600000;
-  return hoursOpen > ESCALATION_HOURS;
+function formatStatus(status) {
+  return STATUSES.find(([value]) => value === status)?.[1] || status;
 }
 
-export default function AdminIssues({ complaints, onUpdate }) {
+function formatDate(date) {
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? "Unknown date" : parsed.toLocaleString();
+}
+
+export default function AdminIssues({
+  issues,
+  escalations,
+  isLoading,
+  errorMessage,
+  onRefresh,
+  onLoadIssue,
+  onUpdatePriority,
+  onUpdateStatus,
+  onResolve,
+}) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
   const [resolutionNote, setResolutionNote] = useState("");
-  const [message, setMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const selectedIssue = complaints.find(
-    (issue) => issue.id === selectedId
-  );
-
-  const filtered = complaints.filter((issue) => {
+  const filtered = issues.filter((issue) => {
     const text = [
       issue.id,
       issue.title,
-      issue.student,
+      issue.description,
+      issue.reporter_name,
       issue.category,
       issue.location,
-      issue.department
+      issue.assigned_to,
     ].join(" ").toLowerCase();
 
     return (
-      text.includes(search.toLowerCase()) &&
-      (statusFilter === "All" || issue.status === statusFilter) &&
-      (priorityFilter === "All" || issue.priority === priorityFilter)
+      text.includes(search.toLowerCase())
+      && (statusFilter === "All" || issue.status === statusFilter)
+      && (priorityFilter === "All" || issue.priority === priorityFilter)
     );
   });
+  const escalatedIds = new Set(escalations.map((issue) => String(issue.id)));
+  const escalatedCount = escalations.length;
 
-  const escalatedCount = complaints.filter(needsEscalation).length;
-
-  function openIssue(id) {
-    setSelectedId(id);
-    setResolutionNote("");
-    setMessage("");
+  async function runAction(action, successMessage, reloadIssueId = null) {
+    setSaving(true);
+    setActionMessage("");
+    setActionError("");
+    try {
+      await action();
+      setActionMessage(successMessage);
+      if (reloadIssueId !== null) {
+        const result = await onLoadIssue(reloadIssueId);
+        setSelectedIssue(result.issue);
+        setHistory(Array.isArray(result.history) ? result.history : []);
+      }
+      return true;
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to save issue changes.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function saveResolution() {
-    if (!selectedIssue) return;
-
-    if (!resolutionNote.trim()) {
-      setMessage("Please enter a resolution note.");
-      return;
+  async function openIssue(issue) {
+    setSelectedIssue(issue);
+    setHistory([]);
+    setDetailsError("");
+    setDetailsLoading(true);
+    try {
+      const result = await onLoadIssue(issue.id);
+      setSelectedIssue(result.issue);
+      setHistory(Array.isArray(result.history) ? result.history : []);
+    } catch (error) {
+      setDetailsError(error instanceof Error ? error.message : "Unable to load issue history.");
+    } finally {
+      setDetailsLoading(false);
     }
+  }
 
-    onUpdate(selectedIssue.id, {
-      status: "Resolved",
-      resolutionNote: resolutionNote.trim()
-    });
-
+  function closeIssue() {
+    setSelectedIssue(null);
+    setDetailsError("");
     setResolutionNote("");
-    setMessage("Resolution recorded successfully in the demo.");
+    setActionMessage("");
+    setActionError("");
   }
 
   return (
@@ -82,158 +124,176 @@ export default function AdminIssues({ complaints, onUpdate }) {
             Complaint Management
           </h2>
           <p className="mt-2 text-xs text-slate-500">
-            Review, prioritize, assign and resolve campus issues.
+            Live reports and history from the authenticated CampusFix API.
           </p>
         </div>
 
-        <span className="rounded-full border border-[#deded9] bg-[#ecece8] px-4 py-2 text-xs font-semibold">
-          {complaints.length} Total Reports
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="rounded-full border border-[#deded9] bg-[#ecece8] px-4 py-2 text-xs font-semibold">
+            {issues.length} Total Reports
+          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="rounded-full border border-[#deded9] bg-[#fffefa] px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
-      {/* ESCALATION SUMMARY */}
+      <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900" role="note">
+        Department assignment is pending integration. The database stores <code>assigned_to</code> as a user ID, so department names are not written. Status changes follow the supported forward workflow; resolving requires a note.
+      </div>
+
+      {errorMessage && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+          {errorMessage}
+        </div>
+      )}
+
       {escalatedCount > 0 && (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4">
-          <h3 className="text-sm font-bold text-red-800">
-            Escalation Attention Required
-          </h3>
+          <h3 className="text-sm font-bold text-red-800">Escalation review needed</h3>
           <p className="mt-2 text-xs text-red-700">
-            {escalatedCount} high-priority complaint(s) have remained
-            unresolved for more than {ESCALATION_HOURS} hours.
-          </p>
-          <p className="mt-1 text-xs text-red-700">
-            These complaints require administrator review.
+            {escalatedCount} high- or urgent-priority report(s) have exceeded the backend escalation threshold.
           </p>
         </div>
       )}
 
-      {/* SEARCH AND FILTERS */}
       <div className="mb-5 flex flex-wrap gap-3">
         <input
           type="search"
-          placeholder="Search complaints..."
+          placeholder="Search reports..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(event) => setSearch(event.target.value)}
           className="min-w-[180px] flex-1 rounded-lg border border-[#deded9] bg-[#fffefa] px-4 py-3 text-xs"
         />
 
         <select
           aria-label="Filter by status"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(event) => setStatusFilter(event.target.value)}
           className="rounded-lg border border-[#deded9] bg-[#fffefa] px-4 py-3 text-xs"
         >
-          <option value="All">All Statuses</option>
-          {statuses.map((status) => (
-            <option key={status}>{status}</option>
+          <option value="All">All statuses</option>
+          {STATUSES.map(([value, label]) => (
+            <option value={value} key={value}>{label}</option>
           ))}
         </select>
 
         <select
           aria-label="Filter by priority"
           value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
+          onChange={(event) => setPriorityFilter(event.target.value)}
           className="rounded-lg border border-[#deded9] bg-[#fffefa] px-4 py-3 text-xs"
         >
-          <option value="All">All Priorities</option>
-          {priorities.map((priority) => (
-            <option key={priority}>{priority}</option>
+          <option value="All">All priorities</option>
+          {PRIORITIES.map((priority) => (
+            <option value={priority} key={priority}>{priority}</option>
           ))}
         </select>
       </div>
 
-      {/* COMPLAINT TABLE */}
+      {actionError && (
+        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          {actionError}
+        </p>
+      )}
+      {actionMessage && (
+        <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700" role="status">
+          {actionMessage}
+        </p>
+      )}
+
       <div className="overflow-x-auto rounded-xl border border-[#deded9] bg-[#fffefa]">
-        <table className="w-full min-w-[850px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[900px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-[#deded9] text-[10px] uppercase tracking-wide text-slate-500">
               <th className="px-4 py-4">Issue</th>
-              <th className="px-4 py-4">Category</th>
+              <th className="px-4 py-4">Reporter</th>
+              <th className="px-4 py-4">Category / location</th>
               <th className="px-4 py-4">Priority</th>
               <th className="px-4 py-4">Status</th>
-              <th className="px-4 py-4">Department</th>
+              <th className="px-4 py-4">Assignment</th>
               <th className="px-4 py-4">Action</th>
             </tr>
           </thead>
-
           <tbody>
             {filtered.map((issue) => (
-              <tr
-                key={issue.id}
-                className="border-b border-[#ecece8] text-slate-600"
-              >
+              <tr key={issue.id} className="border-b border-[#ecece8] text-slate-600">
                 <td className="px-4 py-4">
-                  <strong className="block text-[10px] text-[#111318]">
-                    {issue.id}
-                  </strong>
-                  <span className="mt-1 block font-medium">
-                    {issue.title}
-                  </span>
-
-                  {needsEscalation(issue) && (
+                  <strong className="block text-[10px] text-[#111318]">#{issue.id}</strong>
+                  <span className="mt-1 block font-medium">{issue.title}</span>
+                  {escalatedIds.has(String(issue.id)) && (
                     <span className="mt-2 inline-block rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
-                      Escalation Required
+                      Review overdue
                     </span>
                   )}
                 </td>
-
-                <td className="px-4 py-4">{issue.category}</td>
-
+                <td className="px-4 py-4">{issue.reporter_name || "Unknown reporter"}</td>
+                <td className="px-4 py-4">
+                  {issue.category}<span className="block mt-1 text-slate-400">{issue.location}</span>
+                </td>
                 <td className="px-4 py-4">
                   <select
-                    aria-label={`Priority for ${issue.id}`}
+                    aria-label={`Priority for issue ${issue.id}`}
                     value={issue.priority}
-                    onChange={(e) =>
-                      onUpdate(issue.id, {
-                        priority: e.target.value
-                      })
-                    }
-                    className="rounded-lg border border-[#deded9] bg-white p-2 text-xs"
+                    disabled={saving || isLoading}
+                    onChange={(event) => runAction(
+                      () => onUpdatePriority(issue.id, event.target.value),
+                      "Priority updated successfully.",
+                      selectedIssue?.id === issue.id ? issue.id : null,
+                    )}
+                    className="rounded-lg border border-[#deded9] bg-white p-2 text-xs capitalize disabled:opacity-50"
                   >
-                    {priorities.map((priority) => (
-                      <option key={priority}>{priority}</option>
+                    {PRIORITIES.map((priority) => (
+                      <option value={priority} key={priority}>{priority}</option>
                     ))}
                   </select>
                 </td>
-
-                <td className="px-4 py-4">
-                  <span className="campus-status inline-block rounded-full px-3 py-1 text-[11px]">
-                    {issue.status}
-                  </span>
-                </td>
-
                 <td className="px-4 py-4">
                   <select
-                    aria-label={`Department for ${issue.id}`}
-                    value={issue.department}
-                    onChange={(e) =>
-                      onUpdate(issue.id, {
-                        department: e.target.value
-                      })
-                    }
-                    className="max-w-[160px] rounded-lg border border-[#deded9] bg-white p-2 text-xs"
+                    aria-label={`Status for issue ${issue.id}`}
+                    value={issue.status}
+                    disabled={saving || isLoading || NEXT_STATUSES[issue.status]?.length === 0}
+                    onChange={(event) => runAction(
+                      () => onUpdateStatus(issue.id, event.target.value),
+                      "Status updated successfully.",
+                      selectedIssue?.id === issue.id ? issue.id : null,
+                    )}
+                    className="rounded-lg border border-[#deded9] bg-white p-2 text-xs disabled:opacity-50"
                   >
-                    {departments.map((department) => (
-                      <option key={department}>{department}</option>
+                    <option value={issue.status}>{formatStatus(issue.status)}</option>
+                    {(NEXT_STATUSES[issue.status] || []).map((status) => (
+                      <option value={status} key={status}>{formatStatus(status)}</option>
                     ))}
                   </select>
                 </td>
-
+                <td className="px-4 py-4 text-slate-500">
+                  Department pending integration
+                  <span className="mt-1 block text-[10px]">Assigned user ID: {issue.assigned_to ?? "None"}</span>
+                </td>
                 <td className="px-4 py-4">
                   <button
-                    onClick={() => openIssue(issue.id)}
+                    type="button"
+                    onClick={() => openIssue(issue)}
                     className="rounded-full bg-[#111318] px-4 py-2 font-semibold text-white hover:bg-black"
                   >
-                    Manage
+                    View details
                   </button>
                 </td>
               </tr>
             ))}
 
-            {filtered.length === 0 && (
+            {isLoading && (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Loading reports...</td></tr>
+            )}
+            {!isLoading && !errorMessage && filtered.length === 0 && (
               <tr>
-                <td colSpan="6" className="px-4 py-10 text-center text-slate-500">
-                  No matching complaints found.
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                  {issues.length === 0 ? "No issue reports have been submitted yet." : "No reports match these filters."}
                 </td>
               </tr>
             )}
@@ -241,177 +301,145 @@ export default function AdminIssues({ complaints, onUpdate }) {
         </table>
       </div>
 
-      {/* COMPLAINT DETAILS */}
       {selectedIssue && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setSelectedId(null)}
+          onClick={closeIssue}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Manage complaint"
+            aria-label="Issue details"
             className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-[#fffefa] p-6 shadow-xl sm:p-8"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
-                <span className="text-xs font-bold text-slate-500">
-                  {selectedIssue.id}
-                </span>
-                <h2
-                  className="mt-2 text-xl font-bold"
-                  style={{ fontFamily: "var(--font-heading)" }}
-                >
+                <span className="text-xs font-bold text-slate-500">Issue #{selectedIssue.id}</span>
+                <h2 className="mt-2 text-xl font-bold" style={{ fontFamily: "var(--font-heading)" }}>
                   {selectedIssue.title}
                 </h2>
               </div>
-
-              <button
-                onClick={() => setSelectedId(null)}
-                aria-label="Close complaint"
-                className="text-xl text-slate-500 hover:text-black"
-              >
+              <button type="button" onClick={closeIssue} aria-label="Close issue details" className="text-xl text-slate-500 hover:text-black">
                 ✕
               </button>
             </div>
 
             <div className="space-y-3 text-sm text-slate-600">
-              <p><strong>Student:</strong> {selectedIssue.student}</p>
+              <p><strong>Reporter:</strong> {selectedIssue.reporter_name || "Unknown reporter"}</p>
               <p><strong>Category:</strong> {selectedIssue.category}</p>
               <p><strong>Location:</strong> {selectedIssue.location}</p>
               <p><strong>Description:</strong> {selectedIssue.description}</p>
-              <p><strong>Submitted:</strong> {selectedIssue.date}</p>
+              <p><strong>Submitted:</strong> {formatDate(selectedIssue.created_at)}</p>
+              <p><strong>Status:</strong> {formatStatus(selectedIssue.status)}</p>
+              <p><strong>Priority:</strong> <span className="capitalize">{selectedIssue.priority}</span></p>
+              <p><strong>Assigned user ID:</strong> {selectedIssue.assigned_to ?? "Unassigned"}</p>
             </div>
 
-            <div className="my-6 grid gap-4 sm:grid-cols-3">
-              <label className="grid gap-2 text-xs font-semibold">
-                Status
-                <select
-                  value={selectedIssue.status}
-                  onChange={(e) =>
-                    onUpdate(selectedIssue.id, {
-                      status: e.target.value
-                    })
-                  }
-                  className="rounded-lg border border-[#deded9] bg-white p-3"
-                >
-                  {statuses.map((status) => (
-                    <option key={status}>{status}</option>
-                  ))}
-                </select>
-              </label>
-
+            <div className="my-6 grid gap-4 sm:grid-cols-2">
               <label className="grid gap-2 text-xs font-semibold">
                 Priority
                 <select
                   value={selectedIssue.priority}
-                  onChange={(e) =>
-                    onUpdate(selectedIssue.id, {
-                      priority: e.target.value
-                    })
-                  }
-                  className="rounded-lg border border-[#deded9] bg-white p-3"
+                  disabled={saving}
+                  onChange={(event) => runAction(
+                    () => onUpdatePriority(selectedIssue.id, event.target.value),
+                    "Priority updated successfully.",
+                    selectedIssue.id,
+                  )}
+                  className="rounded-lg border border-[#deded9] bg-white p-3 text-xs capitalize disabled:opacity-50"
                 >
-                  {priorities.map((priority) => (
-                    <option key={priority}>{priority}</option>
+                  {PRIORITIES.map((priority) => (
+                    <option value={priority} key={priority}>{priority}</option>
                   ))}
                 </select>
               </label>
-
               <label className="grid gap-2 text-xs font-semibold">
-                Department
+                Status
                 <select
-                  value={selectedIssue.department}
-                  onChange={(e) =>
-                    onUpdate(selectedIssue.id, {
-                      department: e.target.value
-                    })
-                  }
-                  className="rounded-lg border border-[#deded9] bg-white p-3"
+                  value={selectedIssue.status}
+                  disabled={saving || NEXT_STATUSES[selectedIssue.status]?.length === 0}
+                  onChange={(event) => runAction(
+                    () => onUpdateStatus(selectedIssue.id, event.target.value),
+                    "Status updated successfully.",
+                    selectedIssue.id,
+                  )}
+                  className="rounded-lg border border-[#deded9] bg-white p-3 text-xs disabled:opacity-50"
                 >
-                  {departments.map((department) => (
-                    <option key={department}>{department}</option>
+                  <option value={selectedIssue.status}>{formatStatus(selectedIssue.status)}</option>
+                  {(NEXT_STATUSES[selectedIssue.status] || []).map((status) => (
+                    <option value={status} key={status}>{formatStatus(status)}</option>
                   ))}
                 </select>
               </label>
             </div>
+            <p className="-mt-3 mb-6 text-xs text-slate-500">
+              Department assignment is pending integration. The database assignment field requires a user ID.
+            </p>
 
-            {/* RESOLUTION NOTES */}
-            <div className="border-t border-[#deded9] pt-6">
-              <h3 className="text-sm font-bold">
-                Resolution Notes
-              </h3>
+            {!["resolved", "closed"].includes(selectedIssue.status) && (
+              <div className="mb-7 border-t border-[#deded9] pt-6">
+                <h3 className="text-sm font-bold">Resolve issue</h3>
+                <label className="mt-3 grid gap-2 text-xs font-semibold">
+                  Resolution note (required)
+                  <textarea
+                    value={resolutionNote}
+                    onChange={(event) => setResolutionNote(event.target.value)}
+                    maxLength={5000}
+                    rows={3}
+                    placeholder="Describe the resolution..."
+                    disabled={saving}
+                    className="w-full rounded-lg border border-[#deded9] bg-white p-3 text-sm font-normal"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={saving || !resolutionNote.trim()}
+                  onClick={() => runAction(
+                    () => onResolve(selectedIssue.id, resolutionNote.trim()),
+                    "Issue resolved and resolution note saved.",
+                    selectedIssue.id,
+                  ).then((saved) => {
+                    if (saved) setResolutionNote("");
+                  })}
+                  className="mt-3 rounded-full bg-[#111318] px-5 py-2.5 text-xs font-bold text-white hover:bg-black disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save resolution"}
+                </button>
+              </div>
+            )}
 
-              {selectedIssue.resolutionNote && (
-                <div className="mt-3 rounded-lg bg-[#ecece8] p-4 text-xs">
-                  <strong>Latest recorded resolution:</strong>
-                  <p className="mt-2 whitespace-pre-wrap">
-                    {selectedIssue.resolutionNote}
-                  </p>
-                </div>
+            {actionError && <p className="mb-4 text-sm text-red-700" role="alert">{actionError}</p>}
+            {actionMessage && <p className="mb-4 text-sm text-emerald-700" role="status">{actionMessage}</p>}
+
+            <div className="mt-7 border-t border-[#deded9] pt-6">
+              <h3 className="mb-4 text-sm font-bold">Issue history</h3>
+              {detailsLoading && <p className="text-xs text-slate-500" role="status">Loading issue history...</p>}
+              {detailsError && <p className="text-xs text-red-700" role="alert">{detailsError}</p>}
+              {!detailsLoading && !detailsError && history.length === 0 && (
+                <p className="text-xs text-slate-500">No history has been recorded for this issue.</p>
               )}
-
-              <textarea
-                value={resolutionNote}
-                onChange={(e) => setResolutionNote(e.target.value)}
-                placeholder="Describe the action taken to resolve this issue..."
-                rows={3}
-                className="mt-3 w-full rounded-lg border border-[#deded9] bg-white p-3 text-sm"
-              />
-
-              <button
-                onClick={saveResolution}
-                className="mt-3 rounded-full bg-[#111318] px-5 py-2.5 text-xs font-bold text-white hover:bg-black"
-              >
-                Save Resolution & Mark Resolved
-              </button>
-
-              {message && (
-                <p className="mt-3 text-xs text-slate-600" role="status">
-                  {message}
-                </p>
-              )}
-            </div>
-
-            {/* ACTIVITY TIMELINE */}
-            <div className="mt-8 border-t border-[#deded9] pt-6">
-              <h3 className="mb-4 text-sm font-bold">
-                Activity Timeline
-              </h3>
-
-              {(!selectedIssue.history ||
-                selectedIssue.history.length === 0) && (
-                <p className="text-xs text-slate-500">
-                  No admin changes recorded yet.
-                </p>
-              )}
-
               <div className="space-y-4">
-                {[...(selectedIssue.history || [])]
-                  .reverse()
-                  .map((event) => (
-                    <div
-                      key={event.id}
-                      className="border-l-2 border-[#111318] pl-4"
-                    >
-                      <p className="text-xs font-semibold text-[#111318]">
-                        {event.action}
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        {new Date(event.timestamp).toLocaleString()}
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        By: {event.by}
-                      </p>
-                    </div>
-                  ))}
+                {history.map((event) => (
+                  <div key={event.id} className="border-l-2 border-[#111318] pl-4">
+                    <p className="text-xs font-semibold text-[#111318]">
+                      {event.old_status ? `${formatStatus(event.old_status)} → ` : ""}
+                      {formatStatus(event.new_status)}
+                    </p>
+                    {event.note && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">{event.note}</p>}
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {formatDate(event.created_at)}
+                      {event.changed_by_name ? ` · By ${event.changed_by_name}` : ""}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
 
             <button
-              onClick={() => setSelectedId(null)}
-              className="mt-8 rounded-full border border-[#deded9] px-5 py-2.5 text-xs font-semibold hover:bg-[#ecece8]"
+              type="button"
+              onClick={closeIssue}
+              className="mt-7 rounded-full border border-[#deded9] px-5 py-2.5 text-xs font-semibold hover:bg-[#ecece8]"
             >
               Close
             </button>

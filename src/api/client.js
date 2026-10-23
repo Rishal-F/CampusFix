@@ -2,14 +2,22 @@
 const API_BASE = 'http://localhost:3000/api';
 
 async function request(path, options = {}, expectedStatus) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...options.headers,
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('Cannot connect to CampusFix server. Please check that the backend is running.');
+    }
+    throw error;
+  }
 
   if (response.status === 204) return null;
 
@@ -45,6 +53,30 @@ export const api = {
     request('/auth/logout', { method: 'POST' }),
 
   listIssues: () => request('/issues'),
+
+  getIssue: (id) => request(`/issues/${encodeURIComponent(id)}`),
+
+  updateIssuePriority: (id, priority) =>
+    request(`/admin/issues/${encodeURIComponent(id)}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority }),
+    }),
+
+  updateIssueStatus: (id, status, note) =>
+    request(`/admin/issues/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, ...(note ? { note } : {}) }),
+    }),
+
+  resolveIssue: (id, note) =>
+    request(`/admin/issues/${encodeURIComponent(id)}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  getAdminAnalytics: () => request('/admin/analytics'),
+
+  listEscalations: () => request('/admin/escalations'),
 
   createIssue: (issue) =>
     request('/issues', {

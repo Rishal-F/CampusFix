@@ -1,161 +1,138 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../student/StudentPages";
+import { api } from "../api/client";
 import AdminIssues from "./AdminIssues";
 import AdminAnalytics from "./AdminAnalytics";
-import { initialComplaints } from "./adminMockData";
 import "./AdminDashboard.css";
-
-const STORAGE_KEY = "campusfix-admin-demo-complaints";
-
-// Load saved complaints or use initial demo data
-function loadComplaints() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-
-    if (saved) {
-      const parsed = JSON.parse(saved);
-
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (error) {
-    console.error("Unable to load complaints:", error);
-  }
-
-  return initialComplaints;
-}
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [complaints, setComplaints] = useState(loadComplaints);
+  const [issues, setIssues] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState("");
+  const [escalations, setEscalations] = useState([]);
+  const [escalationError, setEscalationError] = useState("");
 
-  // Update complaint and record activity history
-  function updateComplaint(id, changes) {
-    const timestamp = new Date().toISOString();
+  const refreshIssues = useCallback(async (showSuccess = false) => {
+    setIsLoading(true);
+    setErrorMessage("");
+    setSuccessMessage("");
 
-    const updated = complaints.map((complaint) => {
-      if (complaint.id !== id) {
-        return complaint;
-      }
-
-      const history = [...(complaint.history || [])];
-
-      const fields = [
-        ["status", "Status"],
-        ["priority", "Priority"],
-        ["department", "Department"]
-      ];
-
-      // Record status, priority and department changes
-      fields.forEach(([key, label]) => {
-        if (
-          changes[key] !== undefined &&
-          changes[key] !== complaint[key]
-        ) {
-          history.push({
-            id: crypto.randomUUID(),
-            action: `${label} changed from "${complaint[key]}" to "${changes[key]}"`,
-            timestamp: timestamp,
-            by: "Admin (Demo)"
-          });
-        }
-      });
-
-      // Record resolution notes
-      if (
-        changes.resolutionNote !== undefined &&
-        changes.resolutionNote !== complaint.resolutionNote
-      ) {
-        history.push({
-          id: crypto.randomUUID(),
-          action: `Resolution recorded: ${changes.resolutionNote}`,
-          timestamp: timestamp,
-          by: "Admin (Demo)"
-        });
-      }
-
-      return {
-        ...complaint,
-        ...changes,
-        history: history
-      };
-    });
-
-    // Update React state
-    setComplaints(updated);
-
-    // Save updated complaints in localStorage
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updated)
-      );
+      const result = await api.listIssues();
+      if (!Array.isArray(result.issues)) {
+        throw new Error("The server returned an invalid issue list.");
+      }
+      setIssues(result.issues);
+      if (showSuccess) setSuccessMessage("Issue records refreshed successfully.");
+      return true;
     } catch (error) {
-      console.error("Unable to save changes:", error);
-      alert("Changes were not saved in browser storage.");
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load issue reports.");
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-  }
+  }, []);
 
-  // Dashboard statistics
-  const total = complaints.length;
+  const refreshEscalations = useCallback(async () => {
+    setEscalationError("");
+    try {
+      const result = await api.listEscalations();
+      if (!Array.isArray(result.issues)) {
+        throw new Error("The server returned an invalid escalation list.");
+      }
+      setEscalations(result.issues);
+    } catch (error) {
+      setEscalationError(error instanceof Error ? error.message : "Unable to load escalations.");
+    }
+  }, []);
 
-  const pending = complaints.filter(
-    (item) => item.status === "Pending"
+  const refreshAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError("");
+    try {
+      setAnalytics(await api.getAdminAnalytics());
+    } catch (error) {
+      setAnalyticsError(error instanceof Error ? error.message : "Unable to load analytics.");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshIssues();
+    refreshEscalations();
+  }, [refreshIssues, refreshEscalations]);
+
+  useEffect(() => {
+    if (activeTab === "analytics") refreshAnalytics();
+  }, [activeTab, refreshAnalytics]);
+
+  const updateIssue = useCallback(async (request, successText) => {
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await request();
+      const refreshed = await refreshIssues();
+      await refreshEscalations();
+      if (activeTab === "analytics") await refreshAnalytics();
+      if (!refreshed) {
+        throw new Error("The update was saved, but the issue list could not be refreshed.");
+      }
+      setSuccessMessage(successText);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to update issue.");
+      throw error;
+    }
+  }, [activeTab, refreshAnalytics, refreshEscalations, refreshIssues]);
+
+  const total = issues.length;
+  const needsReview = issues.filter((issue) => issue.status === "reported").length;
+  const inProgress = issues.filter(
+    (issue) => issue.status === "assigned" || issue.status === "in_progress"
   ).length;
-
-  const inProgress = complaints.filter(
-    (item) => item.status === "In Progress"
+  const resolved = issues.filter(
+    (issue) => issue.status === "resolved" || issue.status === "closed"
   ).length;
-
-  const resolved = complaints.filter(
-    (item) => item.status === "Resolved"
-  ).length;
-
   const statistics = [
-    {
-      title: "Total reports",
-      value: total,
-      description: "All reported campus issues",
-      symbol: "▤"
-    },
-    {
-      title: "Needs review",
-      value: pending,
-      description: "Waiting for administrator review",
-      symbol: "◷"
-    },
-    {
-      title: "In progress",
-      value: inProgress,
-      description: "Currently being handled",
-      symbol: "⚙"
-    },
-    {
-      title: "Resolved",
-      value: resolved,
-      description: "Successfully completed",
-      symbol: "✓"
-    }
+    { title: "Total reports", value: total, description: "All submitted campus issues", symbol: "▤" },
+    { title: "Needs review", value: needsReview, description: "Awaiting initial review", symbol: "◷" },
+    { title: "In progress", value: inProgress, description: "Assigned or being worked on", symbol: "⚙" },
+    { title: "Resolved", value: resolved, description: "Resolved or closed reports", symbol: "✓" }
   ];
-
-  // Display five most recent complaints
-  const recentComplaints = [...complaints]
-    .sort((a, b) => b.date.localeCompare(a.date))
+  const recentIssues = [...issues]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5);
+  const escalationIds = new Set(escalations.map((issue) => String(issue.id)));
 
-  // Complaint status styling
   const getStatusClass = (status) => {
-    if (status === "Resolved") {
+    if (status === "resolved" || status === "closed") {
       return "bg-emerald-50 text-emerald-700";
     }
 
-    if (status === "Pending") {
+    if (status === "reported") {
       return "bg-amber-50 text-amber-700";
     }
 
     return "bg-blue-50 text-blue-700";
+  };
+
+  const formatStatus = (status) => ({
+    reported: "Reported",
+    assigned: "Assigned",
+    in_progress: "In progress",
+    resolved: "Resolved",
+    closed: "Closed",
+  })[status] || status;
+
+  const formatDate = (date) => {
+    const parsed = new Date(date);
+    return Number.isNaN(parsed.getTime()) ? "Unknown date" : parsed.toLocaleString();
   };
 
   return (
@@ -177,14 +154,43 @@ export default function AdminDashboard() {
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
-              Review complaints, assign departments and track resolutions.
+              Review reports and monitor issue status from the CampusFix database.
             </p>
           </div>
 
-          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700">
-            Preview mode
-          </span>
+          <button
+            type="button"
+            onClick={() => refreshIssues(true)}
+            disabled={isLoading}
+            className="rounded-full border border-[#deded9] bg-[#fffefa] px-4 py-2 text-xs font-semibold text-[#111318] hover:bg-[#ecece8] disabled:opacity-50"
+          >
+            {isLoading ? "Refreshing..." : "Refresh reports"}
+          </button>
         </div>
+
+        {isLoading && (
+          <p className="mb-5 rounded-lg bg-[#fffefa] p-4 text-sm text-slate-600" role="status">
+            Loading reports from CampusFix...
+          </p>
+        )}
+        {errorMessage && (
+          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+            <p>{errorMessage}</p>
+            <button type="button" className="mt-2 font-semibold underline" onClick={() => refreshIssues()}>
+              Try again
+            </button>
+          </div>
+        )}
+        {successMessage && (
+          <p className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700" role="status">
+            {successMessage}
+          </p>
+        )}
+        {escalationError && (
+          <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" role="status">
+            Escalations could not be loaded: {escalationError}
+          </p>
+        )}
 
         {/* ADMIN TABS */}
 
@@ -218,7 +224,7 @@ export default function AdminDashboard() {
           <>
             {/* DASHBOARD STATISTICS */}
 
-            <section className="mb-9 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {!isLoading && !errorMessage && <section className="mb-9 grid grid-cols-2 gap-3 lg:grid-cols-4">
               {statistics.map((item) => (
                 <div
                   key={item.title}
@@ -246,7 +252,7 @@ export default function AdminDashboard() {
                   </p>
                 </div>
               ))}
-            </section>
+            </section>}
 
             {/* RECENT COMPLAINTS */}
 
@@ -291,7 +297,7 @@ export default function AdminDashboard() {
                     </thead>
 
                     <tbody>
-                      {recentComplaints.map((item) => (
+                      {recentIssues.map((item) => (
                         <tr
                           key={item.id}
                           className="border-t border-[#ecece8] text-xs text-slate-600"
@@ -303,6 +309,9 @@ export default function AdminDashboard() {
 
                             <span className="font-semibold">
                               {item.title}
+                            </span>
+                            <span className="mt-1 block text-[10px] text-slate-400">
+                              {item.reporter_name} · {formatDate(item.created_at)}
                             </span>
                           </td>
 
@@ -318,7 +327,7 @@ export default function AdminDashboard() {
                             <span
                               className={`campus-status inline-flex rounded-full px-3 py-1 text-[11px] font-semibold ${getStatusClass(item.status)}`}
                             >
-                              {item.status}
+                              {formatStatus(item.status)}
                             </span>
                           </td>
 
@@ -334,13 +343,13 @@ export default function AdminDashboard() {
                         </tr>
                       ))}
 
-                      {recentComplaints.length === 0 && (
+                      {!isLoading && !errorMessage && recentIssues.length === 0 && (
                         <tr>
                           <td
                             colSpan="5"
                             className="px-4 py-8 text-center text-slate-500"
                           >
-                            No complaints available.
+                            No issue reports yet.
                           </td>
                         </tr>
                       )}
@@ -356,15 +365,38 @@ export default function AdminDashboard() {
 
         {activeTab === "complaints" && (
           <AdminIssues
-            complaints={complaints}
-            onUpdate={updateComplaint}
+            issues={issues}
+            escalations={escalations}
+            isLoading={isLoading}
+            errorMessage={errorMessage}
+            onRefresh={async () => {
+              await refreshIssues(true);
+              await refreshEscalations();
+            }}
+            onLoadIssue={(id) => api.getIssue(id)}
+            onUpdatePriority={(id, priority) => updateIssue(
+              () => api.updateIssuePriority(id, priority),
+              "Priority updated successfully.",
+            )}
+            onUpdateStatus={(id, status, note) => updateIssue(
+              () => api.updateIssueStatus(id, status, note),
+              "Status updated successfully.",
+            )}
+            onResolve={(id, note) => updateIssue(
+              () => api.resolveIssue(id, note),
+              "Issue resolved and resolution note saved.",
+            )}
           />
         )}
 
         {/* ADMIN ANALYTICS PAGE */}
 
         {activeTab === "analytics" && (
-          <AdminAnalytics complaints={complaints} />
+          analyticsLoading
+            ? <p className="rounded-lg bg-[#fffefa] p-4 text-sm text-slate-600" role="status">Loading database analytics...</p>
+            : analyticsError
+              ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{analyticsError}<button type="button" className="ml-3 font-semibold underline" onClick={refreshAnalytics}>Try again</button></div>
+              : analytics && <AdminAnalytics analytics={analytics} />
         )}
 
       </div>

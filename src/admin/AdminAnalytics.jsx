@@ -1,35 +1,31 @@
-const STATUSES = ["Pending", "In Progress", "Resolved"];
+const STATUSES = [
+  ["reported", "Reported"],
+  ["assigned", "Assigned"],
+  ["in_progress", "In progress"],
+  ["resolved", "Resolved"],
+  ["closed", "Closed"],
+];
+const PRIORITIES = ["low", "medium", "high", "urgent"];
 
-export default function AdminAnalytics({ complaints }) {
-  const total = complaints.length;
-  const resolved = complaints.filter(
-    (complaint) => complaint.status === "Resolved"
-  ).length;
-  const resolutionRate = total === 0
-    ? 0
-    : Math.round((resolved / total) * 100);
-  const categories = complaints.reduce((counts, complaint) => {
-    const category = complaint.category || "Uncategorized";
-    counts[category] = (counts[category] || 0) + 1;
-    return counts;
-  }, {});
-  const categoryEntries = Object.entries(categories).sort(
-    ([, countA], [, countB]) => countB - countA
-  );
+export default function AdminAnalytics({ analytics }) {
+  const total = analytics.total || 0;
+  const resolved = analytics.resolved || 0;
+  const resolutionRate = total === 0 ? 0 : Math.round((resolved / total) * 100);
+  const categoryEntries = analytics.byCategory || [];
 
   return (
     <section>
       <div className="admin-section-heading">
         <div>
           <h2>Complaint Analytics</h2>
-          <p>Overview of complaint statuses and reported categories.</p>
+          <p>Statistics queried from the CampusFix database.</p>
         </div>
       </div>
 
       <div className="admin-analytics-grid">
         <div className="admin-panel">
           <h3>Resolution rate</h3>
-          <p>Complaints resolved</p>
+          <p>Resolved or closed reports</p>
           <div className="admin-big-number">{resolutionRate}%</div>
           <div
             className="admin-progress-track"
@@ -39,42 +35,31 @@ export default function AdminAnalytics({ complaints }) {
             aria-valuemax={100}
             aria-valuenow={resolutionRate}
           >
-            <div
-              className="admin-progress-fill"
-              style={{ width: `${resolutionRate}%` }}
-            />
+            <div className="admin-progress-fill" style={{ width: `${resolutionRate}%` }} />
           </div>
-          <p>{resolved} of {total} complaints resolved</p>
+          <p>{resolved} of {total} reports resolved or closed</p>
         </div>
 
         <div className="admin-panel">
           <h3>By status</h3>
-          {STATUSES.map((status) => {
-            const count = complaints.filter(
-              (complaint) => complaint.status === status
-            ).length;
-            const percentage = total === 0
-              ? 0
-              : Math.round((count / total) * 100);
-
+          {STATUSES.map(([status, label]) => {
+            const count = analytics.byStatus?.[status] || 0;
+            const percentage = total === 0 ? 0 : Math.round((count / total) * 100);
             return (
               <div className="admin-category" key={status}>
                 <div className="admin-category-label">
-                  <span>{status}</span>
+                  <span>{label}</span>
                   <span>{count} ({percentage}%)</span>
                 </div>
                 <div
                   className="admin-progress-track"
                   role="progressbar"
-                  aria-label={`${status} complaints`}
+                  aria-label={`${label} reports`}
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={percentage}
                 >
-                  <div
-                    className="admin-progress-fill"
-                    style={{ width: `${percentage}%` }}
-                  />
+                  <div className="admin-progress-fill" style={{ width: `${percentage}%` }} />
                 </div>
               </div>
             );
@@ -82,15 +67,22 @@ export default function AdminAnalytics({ complaints }) {
         </div>
 
         <div className="admin-panel">
+          <h3>By priority</h3>
+          {PRIORITIES.map((priority) => (
+            <div className="admin-category-label" key={priority}>
+              <span className="capitalize">{priority}</span>
+              <span>{analytics.byPriority?.[priority] || 0}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="admin-panel">
           <h3>By category</h3>
           {categoryEntries.length === 0 ? (
-            <p>No complaints to analyze yet.</p>
+            <p>No reports to analyze yet.</p>
           ) : (
-            categoryEntries.map(([category, count]) => {
-              const percentage = total === 0
-                ? 0
-                : Math.round((count / total) * 100);
-
+            categoryEntries.map(({ category, count }) => {
+              const percentage = total === 0 ? 0 : Math.round((count / total) * 100);
               return (
                 <div className="admin-category" key={category}>
                   <div className="admin-category-label">
@@ -100,15 +92,12 @@ export default function AdminAnalytics({ complaints }) {
                   <div
                     className="admin-progress-track"
                     role="progressbar"
-                    aria-label={`${category} complaints`}
+                    aria-label={`${category} reports`}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={percentage}
                   >
-                    <div
-                      className="admin-progress-fill"
-                      style={{ width: `${percentage}%` }}
-                    />
+                    <div className="admin-progress-fill" style={{ width: `${percentage}%` }} />
                   </div>
                 </div>
               );

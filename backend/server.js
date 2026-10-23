@@ -9,6 +9,7 @@ import MySQLStoreFactory from 'express-mysql-session';
 import { getDbPool } from './config/db.js';
 import authRoutes from './routes/auth.js';
 import issueRoutes from './routes/issues.js';
+import adminRoutes from './routes/admin.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -18,7 +19,7 @@ app.disable('x-powered-by');
 app.use(helmet());
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
@@ -77,6 +78,7 @@ app.get('/api/health/db', async (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/issues', issueRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });

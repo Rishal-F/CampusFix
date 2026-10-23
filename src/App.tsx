@@ -1,6 +1,8 @@
 import AdminDashboard from './admin/AdminDashboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AboutPage, AdminDashboardPage, ContactPage, DashboardPage, HowItWorksPage, MyReportsPage, ReportIssuePage } from './student/StudentPages';
+import { api } from './api/client';
+import { AuthPanel } from './auth/AuthPanel.jsx';
+import { AboutPage, ContactPage, DashboardPage, HowItWorksPage, MyReportsPage, ReportIssuePage } from './student/StudentPages';
 
 const VIDEO_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260530_042513_df96a13b-6155-4f6e-8b93-c9dee66fba08.mp4';
@@ -50,6 +52,8 @@ function CopyIcon() {
 export function App() {
   const getRoute = () => window.location.hash.replace('#', '') || window.location.pathname || '/';
   const [route, setRoute] = useState(getRoute);
+  const [user, setUser] = useState<{ role?: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const handleLocationChange = () => setRoute(getRoute());
@@ -61,14 +65,98 @@ export function App() {
     };
   }, []);
 
-  if (route === '/dashboard') return <DashboardPage />;
-  if (route === '/report') return <ReportIssuePage />;
-  if (route === '/reports' || route.startsWith('/reports/')) return <MyReportsPage />;
-  if (route === '/how-it-works') return <HowItWorksPage />;
-  if (route === '/about') return <AboutPage />;
-  if (route === '/contact') return <ContactPage />;
-  if (route === '/admin' || route.startsWith('/admin/')) return <AdminDashboard />;
-  return <LandingPage />;
+  useEffect(() => {
+    let active = true;
+    api.me()
+      .then((result) => {
+        if (active) setUser(result.user);
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setAuthChecked(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const isAdminRoute = route === '/admin' || route.startsWith('/admin/');
+  const requiresAuth = route === '/report'
+    || route === '/reports'
+    || route.startsWith('/reports/')
+    || isAdminRoute;
+
+  if (!authChecked) {
+    return <main className="grid min-h-screen place-items-center bg-[#f4f4f1] text-sm text-slate-500">Checking your session...</main>;
+  }
+
+  if (requiresAuth && !user) {
+    return <AuthPanel onLogin={(authenticatedUser: { role?: string }) => {
+      setUser(authenticatedUser);
+      window.location.hash = route;
+    }} />;
+  }
+
+  const page = route === '/dashboard'
+    ? <DashboardPage />
+    : route === '/report'
+      ? <ReportIssuePage onAuthRequired={() => setUser(null)} />
+      : route === '/reports' || route.startsWith('/reports/')
+        ? <MyReportsPage />
+        : route === '/how-it-works'
+          ? <HowItWorksPage />
+          : route === '/about'
+            ? <AboutPage />
+            : route === '/contact'
+              ? <ContactPage />
+              : isAdminRoute
+                ? user?.role === 'admin'
+                  ? <AdminDashboard />
+                  : <AccessDeniedPage />
+                : <LandingPage />;
+
+  async function handleLogout() {
+    try {
+      await api.logout();
+      setUser(null);
+      window.location.hash = '/';
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  }
+
+  return (
+    <>
+      {user && (
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="fixed right-5 top-20 z-40 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 md:top-5"
+        >
+          Sign out
+        </button>
+      )}
+      {page}
+    </>
+  );
+}
+
+function AccessDeniedPage() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[#f4f4f1] px-5 py-12 text-[#182033]">
+      <section className="w-full max-w-md rounded-2xl border border-[#deded9] bg-[#fffefa] p-8 shadow-sm">
+        <a className="text-2xl tracking-tight text-[#111318] no-underline" href="/" style={{ fontFamily: 'var(--font-heading)' }}>
+          CampusFix® <span aria-hidden="true">✳︎</span>
+        </a>
+        <h1 className="mt-8 text-2xl font-semibold tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>Access denied</h1>
+        <p className="mt-3 text-sm leading-6 text-[#62708a]">You do not have permission to view this page.</p>
+        <a className="mt-6 inline-block text-sm font-semibold text-[#111318] underline underline-offset-4" href="#/dashboard">Return to dashboard</a>
+      </section>
+    </main>
+  );
 }
 
 function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {

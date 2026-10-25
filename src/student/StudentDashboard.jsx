@@ -185,6 +185,21 @@ export function StudentDashboard({ user, onLogout }) {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
 
+  useEffect(() => {
+    const stylesheets = [
+      new URL('../styles/tokens.css', import.meta.url).href,
+      new URL('../styles/global.css', import.meta.url).href,
+    ].map((href) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      document.head.append(link);
+      return link;
+    });
+
+    return () => stylesheets.forEach((stylesheet) => stylesheet.remove());
+  }, []);
+
   const loadIssues = useCallback(async () => {
     setLoading(true);
     setError('');

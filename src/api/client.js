@@ -78,6 +78,14 @@ export const api = {
 
   listEscalations: () => request('/admin/escalations'),
 
+  getAdminAssignees: () => request('/admin/assignees'),
+
+  assignIssue: (id, assigneeId) =>
+    request(`/admin/issues/${encodeURIComponent(id)}/assignment`, {
+      method: 'PATCH',
+      body: JSON.stringify({ assigneeId }),
+    }),
+
   createIssue: (issue) =>
     request('/issues', {
       method: 'POST',

@@ -25,15 +25,30 @@ function formatDate(date) {
   return Number.isNaN(parsed.getTime()) ? "Unknown date" : parsed.toLocaleString();
 }
 
+function sameOriginImageUrl(imageKey) {
+  if (typeof imageKey !== "string" || !imageKey.trim()) return null;
+
+  try {
+    const url = new URL(imageKey, window.location.origin);
+    return url.origin === window.location.origin ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AdminIssues({
   issues,
   escalations,
+  assignees,
+  assigneesLoading,
+  assigneesError,
   isLoading,
   errorMessage,
   onRefresh,
   onLoadIssue,
   onUpdatePriority,
   onUpdateStatus,
+  onAssign,
   onResolve,
 }) {
   const [search, setSearch] = useState("");
@@ -67,6 +82,7 @@ export default function AdminIssues({
   });
   const escalatedIds = new Set(escalations.map((issue) => String(issue.id)));
   const escalatedCount = escalations.length;
+  const assigneeById = new Map(assignees.map((assignee) => [String(assignee.id), assignee]));
 
   async function runAction(action, successMessage, reloadIssueId = null) {
     setSaving(true);
@@ -144,8 +160,20 @@ export default function AdminIssues({
       </div>
 
       <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900" role="note">
-        Department assignment is pending integration. The database stores <code>assigned_to</code> as a user ID, so department names are not written. Status changes follow the supported forward workflow; resolving requires a note.
+        Assignments are made to existing admin users. Choosing an assignee does not change the complaint status.
       </div>
+
+      {assigneesError && (
+        <p className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+          Eligible assignees could not be loaded: {assigneesError}
+        </p>
+      )}
+
+      {!assigneesLoading && !assigneesError && assignees.length === 0 && (
+        <p className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          No admin users are currently available for assignment.
+        </p>
+      )}
 
       {errorMessage && (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
@@ -271,9 +299,30 @@ export default function AdminIssues({
                     ))}
                   </select>
                 </td>
-                <td className="px-4 py-4 text-slate-500">
-                  Department pending integration
-                  <span className="mt-1 block text-[10px]">Assigned user ID: {issue.assigned_to ?? "None"}</span>
+                <td className="px-4 py-4">
+                  <select
+                    aria-label={`Assignee for issue ${issue.id}`}
+                    value={issue.assigned_to == null ? "" : String(issue.assigned_to)}
+                    disabled={saving || isLoading || assigneesLoading || Boolean(assigneesError)}
+                    onChange={(event) => runAction(
+                      () => onAssign(issue.id, event.target.value || null),
+                      event.target.value ? "Issue assigned successfully." : "Issue unassigned successfully.",
+                      selectedIssue?.id === issue.id ? issue.id : null,
+                    )}
+                    className="max-w-48 rounded-lg border border-[#deded9] bg-white p-2 text-xs disabled:opacity-50"
+                  >
+                    <option value="">Unassigned</option>
+                    {issue.assigned_to != null && !assigneeById.has(String(issue.assigned_to)) && (
+                      <option value={String(issue.assigned_to)}>
+                        Unavailable admin (ID {issue.assigned_to})
+                      </option>
+                    )}
+                    {assignees.map((assignee) => (
+                      <option value={String(assignee.id)} key={assignee.id}>
+                        {assignee.fullName}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="px-4 py-4">
                   <button
@@ -333,8 +382,25 @@ export default function AdminIssues({
               <p><strong>Submitted:</strong> {formatDate(selectedIssue.created_at)}</p>
               <p><strong>Status:</strong> {formatStatus(selectedIssue.status)}</p>
               <p><strong>Priority:</strong> <span className="capitalize">{selectedIssue.priority}</span></p>
-              <p><strong>Assigned user ID:</strong> {selectedIssue.assigned_to ?? "Unassigned"}</p>
+              <p>
+                <strong>Assigned to:</strong>{" "}
+                {selectedIssue.assigned_to == null
+                  ? "Unassigned"
+                  : assigneeById.get(String(selectedIssue.assigned_to))?.fullName
+                    || `Admin user ${selectedIssue.assigned_to}`}
+              </p>
             </div>
+
+            {sameOriginImageUrl(selectedIssue.image_key) && (
+              <figure className="my-5">
+                <figcaption className="mb-2 text-xs font-semibold text-slate-700">Issue image</figcaption>
+                <img
+                  src={sameOriginImageUrl(selectedIssue.image_key)}
+                  alt={`Image attached to issue ${selectedIssue.id}`}
+                  className="max-h-80 w-full rounded-lg border border-[#deded9] object-contain"
+                />
+              </figure>
+            )}
 
             <div className="my-6 grid gap-4 sm:grid-cols-2">
               <label className="grid gap-2 text-xs font-semibold">
@@ -373,10 +439,6 @@ export default function AdminIssues({
                 </select>
               </label>
             </div>
-            <p className="-mt-3 mb-6 text-xs text-slate-500">
-              Department assignment is pending integration. The database assignment field requires a user ID.
-            </p>
-
             {!["resolved", "closed"].includes(selectedIssue.status) && (
               <div className="mb-7 border-t border-[#deded9] pt-6">
                 <h3 className="text-sm font-bold">Resolve issue</h3>

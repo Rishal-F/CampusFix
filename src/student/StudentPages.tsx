@@ -40,21 +40,59 @@ function Priority({ priority }: { priority: ReportPriority }) {
   return <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><span className={`h-1.5 w-1.5 rounded-full ${tone}`} />{priority}</span>;
 }
 
-function ProductNavbar({ open, onToggle, onClose }: { open: boolean; onToggle: () => void; onClose: () => void }) {
-  const links = [
-    ['Report an issue', '#/report'],
-    ['My reports', '#/reports'],
-    ['How it works', '#/how-it-works'],
-    ['About us', '#/about'],
-  ];
+type ProductNavLink = {
+  label: string;
+  path: string;
+  active?: boolean;
+  onClick?: () => void;
+};
+
+const studentNavigation: ProductNavLink[] = [
+  { label: 'Report an issue', path: '#/report' },
+  { label: 'My reports', path: '#/reports' },
+  { label: 'How it works', path: '#/how-it-works' },
+  { label: 'About us', path: '#/about' },
+];
+
+function ProductNavbar({
+  open,
+  onToggle,
+  onClose,
+  links = studentNavigation,
+  showContact = true,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  links?: ProductNavLink[];
+  showContact?: boolean;
+}) {
+  const handleLinkClick = (event: React.MouseEvent<HTMLAnchorElement>, link: ProductNavLink) => {
+    if (link.onClick) {
+      event.preventDefault();
+      link.onClick();
+    }
+    onClose();
+  };
+
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-30 grid grid-cols-[auto_1fr_auto] items-center gap-5 border-b border-black/10 bg-[#f4f4f1]/90 px-5 py-4 backdrop-blur-sm sm:px-8 sm:py-5 md:pr-32">
         <a className="flex items-center gap-3 text-[21px] tracking-tight text-black sm:text-[26px]" style={{ fontFamily: 'var(--font-heading)' }} href="/">CampusFix® <span className="select-none text-[25px] tracking-[-0.02em] sm:text-[30px]">✳︎</span></a>
         <nav className="hidden items-center justify-center gap-5 text-[16px] text-black md:flex lg:gap-7 lg:text-[20px]">
-          {links.map(([label, path]) => <a className="whitespace-nowrap transition-opacity hover:opacity-60" href={path} key={path}>{label}</a>)}
+          {links.map((link) => (
+            <a
+              className={`whitespace-nowrap transition-opacity hover:opacity-60 ${link.active ? 'font-semibold underline underline-offset-4' : ''}`}
+              href={link.path}
+              key={link.label}
+              onClick={(event) => handleLinkClick(event, link)}
+              aria-current={link.active ? 'page' : undefined}
+            >
+              {link.label}
+            </a>
+          ))}
         </nav>
-        <a className="hidden justify-self-end text-sm text-black underline underline-offset-2 transition-opacity hover:opacity-60 md:block lg:text-[20px]" href="#/contact">Get in touch</a>
+        {showContact && <a className="hidden justify-self-end text-sm text-black underline underline-offset-2 transition-opacity hover:opacity-60 md:block lg:text-[20px]" href="#/contact">Get in touch</a>}
         <button className="col-start-3 justify-self-end md:hidden" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Close menu' : 'Open menu'}>
           <span className={`block h-[2px] w-6 bg-black transition-transform duration-300 ${open ? 'translate-y-[7px] rotate-45' : ''}`} />
           <span className={`mt-[5px] block h-[2px] w-6 bg-black transition-opacity duration-300 ${open ? 'opacity-0' : ''}`} />
@@ -62,18 +100,46 @@ function ProductNavbar({ open, onToggle, onClose }: { open: boolean; onToggle: (
         </button>
       </header>
       <div className={`fixed inset-0 z-20 flex flex-col justify-center gap-8 bg-white/95 px-8 backdrop-blur-sm transition-opacity duration-300 md:hidden ${open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`} aria-hidden={!open}>
-        {links.map(([label, path]) => <a className="text-[30px] leading-none" href={path} onClick={onClose} key={path}>{label}</a>)}
-        <a className="text-[30px] leading-none underline underline-offset-4" href="#/contact" onClick={onClose}>Get in touch</a>
+        {links.map((link) => (
+          <a
+            className={`text-[30px] leading-none ${link.active ? 'underline underline-offset-4' : ''}`}
+            href={link.path}
+            onClick={(event) => handleLinkClick(event, link)}
+            key={link.label}
+            aria-current={link.active ? 'page' : undefined}
+          >
+            {link.label}
+          </a>
+        ))}
+        {showContact && <a className="text-[30px] leading-none underline underline-offset-4" href="#/contact" onClick={onClose}>Get in touch</a>}
       </div>
     </>
   );
 }
 
-export function AppShell({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
+export function AppShell({
+  children,
+  title,
+  subtitle,
+  navigation,
+  showContact,
+}: {
+  children: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  navigation?: ProductNavLink[];
+  showContact?: boolean;
+}) {
 const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <div className="campus-product-shell min-h-screen bg-[#f4f4f1] text-black">
-      <ProductNavbar open={mobileOpen} onToggle={() => setMobileOpen((value) => !value)} onClose={() => setMobileOpen(false)} />
+      <ProductNavbar
+        open={mobileOpen}
+        onToggle={() => setMobileOpen((value) => !value)}
+        onClose={() => setMobileOpen(false)}
+        links={navigation}
+        showContact={showContact}
+      />
       <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-5 pb-16 pt-32 sm:px-8 md:pt-36">
         <div className="mb-9 max-w-2xl">
           <p className="mb-4 text-xs uppercase tracking-[0.16em] text-black/50">CampusFix</p>

@@ -31,11 +31,20 @@ function createPool() {
           transaction.released = true;
         },
         async execute(sql, parameters = []) {
-          if (sql.includes('FOR UPDATE')) {
+          if (sql.includes('FROM issues') && sql.includes('FOR UPDATE')) {
             const issue = state.issue && String(state.issue.id) === String(parameters[0])
               ? { ...state.issue }
               : null;
             return [issue ? [issue] : []];
+          }
+          if (sql.includes('AND role =') && sql.includes('FROM users')) {
+            const user = state.users.find((item) => String(item.id) === String(parameters[0])
+              && item.role === 'admin');
+            return [user ? [{ ...user }] : []];
+          }
+          if (sql.includes('UPDATE issues SET assigned_to = ?')) {
+            state.issue.assigned_to = parameters[0];
+            return [{ affectedRows: 1 }];
           }
           if (sql.includes('UPDATE issues SET priority = ?')) {
             state.issue.priority = parameters[0];
@@ -66,6 +75,11 @@ function createPool() {
       };
     },
     async execute(sql) {
+      if (sql.includes("FROM users") && sql.includes("role = 'admin'")) {
+        return [state.users
+          .filter((user) => user.role === 'admin')
+          .map(({ id, full_name, email }) => ({ id, full_name, email }))];
+      }
       if (sql.includes('GROUP BY status')) {
         return [[{ status: 'reported', count: state.issue ? 1 : 0 }]];
       }
@@ -93,7 +107,13 @@ beforeEach(async () => {
       status: 'reported',
       priority: 'medium',
       title: 'Test issue',
+      assigned_to: null,
     },
+    users: [
+      { id: 42, full_name: 'Admin User', email: 'admin@example.test', role: 'admin' },
+      { id: 43, full_name: 'Second Admin', email: 'second@example.test', role: 'admin' },
+      { id: 17, full_name: 'Student User', email: 'student@example.test', role: 'student' },
+    ],
     history: [],
     failHistory: false,
   };
@@ -208,6 +228,111 @@ test('authentication and admin role are enforced', async () => {
     body: { priority: 'high' },
   });
   assert.equal(student.status, 403);
+});
+
+test('eligible assignee list is restricted to admin users', async () => {
+  const response = await request('/assignees', { role: 'admin' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    assignees: [
+      { id: '42', fullName: 'Admin User', email: 'admin@example.test' },
+      { id: '43', fullName: 'Second Admin', email: 'second@example.test' },
+    ],
+  });
+});
+
+test('only authenticated admins can access assignees and assign issues', async () => {
+  const unauthenticatedList = await request('/assignees');
+  assert.equal(unauthenticatedList.status, 401);
+
+  const studentList = await request('/assignees', { role: 'student' });
+  assert.equal(studentList.status, 403);
+
+  const unauthenticatedAssignment = await request('/issues/7/assignment', {
+    method: 'PATCH',
+    body: { assigneeId: '42' },
+  });
+  assert.equal(unauthenticatedAssignment.status, 401);
+
+  const studentAssignment = await request('/issues/7/assignment', {
+    role: 'student',
+    method: 'PATCH',
+    body: { assigneeId: '42' },
+  });
+  assert.equal(studentAssignment.status, 403);
+});
+
+test('assignment, reassignment, and unassignment use eligible IDs without changing status history', async () => {
+  const assigned = await request('/issues/7/assignment', {
+    role: 'admin',
+    method: 'PATCH',
+    body: { assigneeId: '42' },
+  });
+  const assignedResult = await assigned.json();
+  assert.equal(assigned.status, 200, JSON.stringify(assignedResult));
+  assert.equal(state.issue.assigned_to, 42);
+  assert.equal(state.issue.status, 'reported');
+  assert.equal(state.history.length, 0);
+  assert.deepEqual(assignedResult.issue.assignedTo, {
+    id: '42',
+    fullName: 'Admin User',
+    email: 'admin@example.test',
+  });
+  assert.equal(transaction.committed, true);
+  assert.equal(transaction.released, true);
+
+  const reassigned = await request('/issues/7/assignment', {
+    role: 'admin',
+    method: 'PATCH',
+    body: { assigneeId: '43' },
+  });
+  assert.equal(reassigned.status, 200);
+  assert.equal(state.issue.assigned_to, 43);
+
+  const unassigned = await request('/issues/7/assignment', {
+    role: 'admin',
+    method: 'PATCH',
+    body: { assigneeId: null },
+  });
+  assert.equal(unassigned.status, 200);
+  assert.equal(state.issue.assigned_to, null);
+  assert.equal((await unassigned.json()).issue.assignedTo, null);
+  assert.equal(state.issue.status, 'reported');
+  assert.equal(state.history.length, 0);
+});
+
+test('assignment rejects invalid IDs, student assignees, and missing issues', async () => {
+  for (const assigneeId of ['0', '01', '18446744073709551616', 42, 'not-an-id', undefined]) {
+    const response = await request('/issues/7/assignment', {
+      role: 'admin',
+      method: 'PATCH',
+      body: { assigneeId },
+    });
+    assert.equal(response.status, 400);
+  }
+
+  const studentAssignee = await request('/issues/7/assignment', {
+    role: 'admin',
+    method: 'PATCH',
+    body: { assigneeId: '17' },
+  });
+  assert.equal(studentAssignee.status, 400);
+
+  const nonexistentAssignee = await request('/issues/7/assignment', {
+    role: 'admin',
+    method: 'PATCH',
+    body: { assigneeId: '999' },
+  });
+  assert.equal(nonexistentAssignee.status, 400);
+
+  state.issue = null;
+  const missingIssue = await request('/issues/7/assignment', {
+    role: 'admin',
+    method: 'PATCH',
+    body: { assigneeId: '42' },
+  });
+  assert.equal(missingIssue.status, 404);
+  assert.equal(state.history.length, 0);
 });
 
 test('invalid input and missing issues are rejected', async () => {

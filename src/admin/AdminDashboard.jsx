@@ -8,6 +8,11 @@ import "./AdminDashboard.css";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
+  const navigation = [
+    { label: "Overview", path: "#/admin", active: activeTab === "overview", onClick: () => setActiveTab("overview") },
+    { label: "Manage Complaints", path: "#/admin", active: activeTab === "complaints", onClick: () => setActiveTab("complaints") },
+    { label: "Analytics", path: "#/admin", active: activeTab === "analytics", onClick: () => setActiveTab("analytics") },
+  ];
   const [issues, setIssues] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -17,6 +22,9 @@ export default function AdminDashboard() {
   const [analyticsError, setAnalyticsError] = useState("");
   const [escalations, setEscalations] = useState([]);
   const [escalationError, setEscalationError] = useState("");
+  const [assignees, setAssignees] = useState([]);
+  const [assigneesLoading, setAssigneesLoading] = useState(true);
+  const [assigneesError, setAssigneesError] = useState("");
 
   const refreshIssues = useCallback(async (showSuccess = false) => {
     setIsLoading(true);
@@ -68,6 +76,29 @@ export default function AdminDashboard() {
     refreshIssues();
     refreshEscalations();
   }, [refreshIssues, refreshEscalations]);
+
+  useEffect(() => {
+    let active = true;
+    api.getAdminAssignees()
+      .then((result) => {
+        if (!Array.isArray(result.assignees)) {
+          throw new Error("The server returned an invalid assignee list.");
+        }
+        if (active) setAssignees(result.assignees);
+      })
+      .catch((error) => {
+        if (active) {
+          setAssigneesError(error instanceof Error ? error.message : "Unable to load eligible assignees.");
+        }
+      })
+      .finally(() => {
+        if (active) setAssigneesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (activeTab === "analytics") refreshAnalytics();
@@ -139,6 +170,8 @@ export default function AdminDashboard() {
     <AppShell
       title="Admin overview"
       subtitle="Operations workspace for reviewing, managing and resolving campus issue reports."
+      navigation={navigation}
+      showContact={false}
     >
       <div className="campus-admin-module">
 
@@ -191,32 +224,6 @@ export default function AdminDashboard() {
             Escalations could not be loaded: {escalationError}
           </p>
         )}
-
-        {/* ADMIN TABS */}
-
-        <nav
-          className="mb-8 flex flex-wrap gap-2 border-b border-[#deded9] pb-4"
-          aria-label="Admin sections"
-        >
-          {[
-            ["overview", "Overview"],
-            ["complaints", "Manage complaints"],
-            ["analytics", "Analytics"]
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setActiveTab(key)}
-              className={`rounded-full px-5 py-2.5 text-xs font-semibold transition-colors ${
-                activeTab === key
-                  ? "bg-[#111318] text-white"
-                  : "border border-[#deded9] bg-[#fffefa] text-[#111318] hover:bg-[#ecece8]"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
 
         {/* OVERVIEW PAGE */}
 
@@ -367,6 +374,9 @@ export default function AdminDashboard() {
           <AdminIssues
             issues={issues}
             escalations={escalations}
+            assignees={assignees}
+            assigneesLoading={assigneesLoading}
+            assigneesError={assigneesError}
             isLoading={isLoading}
             errorMessage={errorMessage}
             onRefresh={async () => {
@@ -381,6 +391,10 @@ export default function AdminDashboard() {
             onUpdateStatus={(id, status, note) => updateIssue(
               () => api.updateIssueStatus(id, status, note),
               "Status updated successfully.",
+            )}
+            onAssign={(id, assigneeId) => updateIssue(
+              () => api.assignIssue(id, assigneeId),
+              assigneeId === null ? "Issue unassigned successfully." : "Issue assigned successfully.",
             )}
             onResolve={(id, note) => updateIssue(
               () => api.resolveIssue(id, note),

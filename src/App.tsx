@@ -2,7 +2,14 @@ import AdminDashboard from './admin/AdminDashboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api/client';
 import { AuthPanel } from './auth/AuthPanel.jsx';
-import { AboutPage, ContactPage, DashboardPage, HowItWorksPage, MyReportsPage, ReportIssuePage } from './student/StudentPages';
+import { StudentDashboard } from './student/StudentDashboard.jsx';
+import {
+  AboutPage,
+  ContactPage,
+  HowItWorksPage,
+  MyReportsPage,
+  ReportIssuePage,
+} from './student/StudentPages';
 
 const VIDEO_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260530_042513_df96a13b-6155-4f6e-8b93-c9dee66fba08.mp4';
@@ -83,6 +90,16 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!authChecked) return;
+
+    if (user?.role === 'admin' && (route === '/' || route === '/dashboard')) {
+      window.location.hash = '/admin';
+    } else if (user?.role === 'student' && route === '/') {
+      window.location.hash = '/dashboard';
+    }
+  }, [authChecked, route, user]);
+
   const isAdminRoute = route === '/admin' || route.startsWith('/admin/');
   const requiresAuth = route === '/report'
     || route === '/reports'
@@ -93,15 +110,23 @@ export function App() {
     return <main className="grid min-h-screen place-items-center bg-[#f4f4f1] text-sm text-slate-500">Checking your session...</main>;
   }
 
-  if (requiresAuth && !user) {
+  if ((requiresAuth || route === '/login') && !user) {
     return <AuthPanel onLogin={(authenticatedUser: { role?: string }) => {
       setUser(authenticatedUser);
-      window.location.hash = route;
+      if (authenticatedUser.role === 'admin') {
+        window.location.hash = '/admin';
+      } else if (authenticatedUser.role === 'student') {
+        window.location.hash = '/dashboard';
+      }
     }} />;
   }
 
   const page = route === '/dashboard'
-    ? <DashboardPage />
+    ? user?.role === 'student'
+      ? <StudentDashboard user={user} onLogout={handleLogout} />
+      : user?.role === 'admin'
+        ? <AdminDashboard />
+        : <AccessDeniedPage />
     : route === '/report'
       ? <ReportIssuePage onAuthRequired={() => setUser(null)} />
       : route === '/reports' || route.startsWith('/reports/')
@@ -122,7 +147,7 @@ export function App() {
     try {
       await api.logout();
       setUser(null);
-      window.location.hash = '/';
+      window.location.hash = '/login';
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -130,7 +155,7 @@ export function App() {
 
   return (
     <>
-      {user && (
+      {user && !(route === '/dashboard' && user.role === 'student') && (
         <button
           type="button"
           onClick={handleLogout}

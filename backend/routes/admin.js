@@ -12,6 +12,11 @@ function validIssueId(value) {
   return BigInt(value) <= MAX_ISSUE_ID;
 }
 
+function validUserId(value) {
+  if (typeof value !== 'string' || !/^[1-9]\d{0,19}$/.test(value)) return false;
+  return BigInt(value) <= MAX_ISSUE_ID;
+}
+
 function validStatusTransition(from, to) {
   const transitions = {
     reported: ['assigned', 'in_progress', 'closed'],
@@ -39,6 +44,108 @@ function createAdminRouter({
       return res.status(403).json({ error: 'Request origin is not allowed' });
     }
     return next();
+  });
+
+  router.get('/assignees', async (_req, res) => {
+    try {
+      const [users] = await poolProvider().execute(
+        `SELECT id, full_name, email
+         FROM users
+         WHERE role = 'admin'
+         ORDER BY full_name ASC, id ASC`,
+      );
+      return res.json({
+        assignees: users.map((user) => ({
+          id: String(user.id),
+          fullName: user.full_name,
+          email: user.email,
+        })),
+      });
+    } catch (error) {
+      console.error('Admin assignee list failed:', error.message);
+      return res.status(500).json({ error: 'Unable to retrieve eligible assignees' });
+    }
+  });
+
+  router.patch('/issues/:id/assignment', async (req, res) => {
+    const issueId = req.params.id;
+    const { assigneeId } = req.body || {};
+
+    if (!validIssueId(issueId)) {
+      return res.status(400).json({ error: 'Invalid issue ID' });
+    }
+    if (assigneeId !== null && !validUserId(assigneeId)) {
+      return res.status(400).json({ error: 'Assignee ID must be a valid admin user ID or null' });
+    }
+
+    let connection;
+    let transactionStarted = false;
+    try {
+      connection = await poolProvider().getConnection();
+      await connection.beginTransaction();
+      transactionStarted = true;
+
+      const [issues] = await connection.execute(
+        `SELECT id, assigned_to
+         FROM issues
+         WHERE id = ?
+         FOR UPDATE`,
+        [issueId],
+      );
+      if (!issues.length) {
+        await connection.rollback();
+        transactionStarted = false;
+        return res.status(404).json({ error: 'Issue not found' });
+      }
+
+      let assignee = null;
+      if (assigneeId !== null) {
+        const [users] = await connection.execute(
+          `SELECT id, full_name, email
+           FROM users
+           WHERE id = ? AND role = 'admin'
+           LIMIT 1
+           FOR UPDATE`,
+          [assigneeId],
+        );
+        assignee = users[0];
+        if (!assignee) {
+          await connection.rollback();
+          transactionStarted = false;
+          return res.status(400).json({ error: 'Assignee must be an existing admin user' });
+        }
+      }
+
+      await connection.execute(
+        'UPDATE issues SET assigned_to = ? WHERE id = ?',
+        [assignee ? assignee.id : null, issueId],
+      );
+      await connection.commit();
+      transactionStarted = false;
+
+      return res.json({
+        issue: {
+          id: String(issueId),
+          assignedTo: assignee ? {
+            id: String(assignee.id),
+            fullName: assignee.full_name,
+            email: assignee.email,
+          } : null,
+        },
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        try {
+          await connection.rollback();
+        } catch (rollbackError) {
+          console.error('Admin assignment rollback failed:', rollbackError.message);
+        }
+      }
+      console.error('Admin issue assignment failed:', error.message);
+      return res.status(500).json({ error: 'Unable to assign issue' });
+    } finally {
+      connection?.release();
+    }
   });
 
   async function updateIssue(req, res, change) {

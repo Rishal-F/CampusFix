@@ -10,6 +10,7 @@ export type Report = {
   priority: ReportPriority;
   status: ReportStatus;
   description: string;
+  hasImage?: boolean;
 };
 
 export const mockReports: Report[] = [

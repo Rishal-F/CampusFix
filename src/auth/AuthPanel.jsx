@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { api } from '../api/client';
 
-export function AuthPanel({ onLogin }) {
+export function AuthPanel({ onLogin, role = 'student' }) {
   const [mode, setMode] = useState('login');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,6 +23,10 @@ export function AuthPanel({ onLogin }) {
 
       await api.login(normalizedEmail, password);
       const result = await api.me();
+      if (result.user.role !== role) {
+        await api.logout();
+        throw new Error(`This account is not a ${role} account.`);
+      }
       onLogin(result.user);
     } catch (err) {
       setError(err.message || (mode === 'register' ? 'Unable to create account' : 'Unable to sign in'));
@@ -36,13 +40,15 @@ export function AuthPanel({ onLogin }) {
       <div className="auth-frame">
         <a className="auth-brand" href="/">CampusFix® <span aria-hidden="true">✳︎</span></a>
         <form className="auth-card" onSubmit={handleSubmit}>
-          <p className="auth-eyebrow">Student access</p>
+          <p className="auth-eyebrow">{role === 'admin' ? 'Admin access' : 'Student access'}</p>
           <h1>
           {mode === 'login' ? 'Welcome back' : 'Create your student account'}
           </h1>
 
           <p className="auth-intro">
-            Sign in to report issues and track their progress.
+            {role === 'admin'
+              ? 'Sign in to manage campus reports and review issue progress.'
+              : 'Sign in to report issues and track their progress.'}
           </p>
 
           {mode === 'register' && (
@@ -97,7 +103,7 @@ export function AuthPanel({ onLogin }) {
             {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Register'}
           </button>
 
-          <button
+          {role === 'student' && <button
             type="button"
             onClick={() => {
               setMode(mode === 'login' ? 'register' : 'login');
@@ -108,7 +114,7 @@ export function AuthPanel({ onLogin }) {
             {mode === 'login'
               ? 'New student? Create an account'
               : 'Already registered? Sign in'}
-          </button>
+          </button>}
         </form>
       </div>
     </main>

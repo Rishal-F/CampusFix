@@ -104,6 +104,10 @@ export function App() {
   const isStudentRoute = route === '/report'
     || route === '/reports'
     || route.startsWith('/reports/');
+  const isLoginRoute = route === '/login'
+    || route === '/login/student'
+    || route === '/login/admin';
+  const loginRole = route === '/login/admin' ? 'admin' : 'student';
   const requiresAuth = route === '/report'
     || route === '/reports'
     || route.startsWith('/reports/')
@@ -113,8 +117,8 @@ export function App() {
     return <main className="grid min-h-screen place-items-center bg-[#f4f4f1] text-sm text-slate-500">Checking your session...</main>;
   }
 
-  if ((requiresAuth || route === '/login') && !user) {
-    return <AuthPanel onLogin={(authenticatedUser: { role?: string }) => {
+  if ((requiresAuth || isLoginRoute) && !user) {
+    return <AuthPanel role={loginRole} onLogin={(authenticatedUser: { role?: string }) => {
       setUser(authenticatedUser);
       if (authenticatedUser.role === 'admin') {
         window.location.hash = '/admin';
@@ -345,6 +349,20 @@ function LandingPage() {
               <span>Reach us: <u className="underline-offset-1">hello@campusfix.co</u></span>
               <CopyIcon />
             </button>
+          </div>
+          <div className={`mt-2 flex flex-wrap gap-2 transition-[opacity,transform] duration-[400ms] ease-out ${actionsVisible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>
+            <a
+              className="inline-flex items-center justify-center rounded-full border border-black/15 bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white sm:text-[15px]"
+              href="#/login/student"
+            >
+              Login as Student
+            </a>
+            <a
+              className="inline-flex items-center justify-center rounded-full border border-black bg-black px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-white hover:text-black sm:text-[15px]"
+              href="#/login/admin"
+            >
+              Login as Admin
+            </a>
           </div>
           {copyFeedback && <p className="mt-2 text-xs text-black/75" role="status">{copyFeedback}</p>}
         </div>

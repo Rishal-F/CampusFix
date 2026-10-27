@@ -3,7 +3,7 @@ import multer from 'multer';
 import { fileTypeFromBuffer } from 'file-type';
 import { getDbPool } from '../config/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { s3Storage } from '../services/s3Storage.js';
+import { getImageStorage } from '../services/imageStorage.js';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -63,14 +63,15 @@ function parseOptionalImage(req, res, next) {
   });
 }
 
-function isMissingS3Object(error) {
+function isMissingImage(error) {
   return error?.name === 'NoSuchKey'
     || error?.name === 'NotFound'
+    || error?.code === 'ENOENT'
     || error?.$metadata?.httpStatusCode === 404;
 }
 
 async function readImageBody(body) {
-  if (!body) throw new Error('S3 returned an empty image body');
+  if (!body) throw new Error('Storage returned an empty image body');
 
   if (Buffer.isBuffer(body)) {
     if (body.length > MAX_IMAGE_SIZE) throw new Error('Stored image exceeds the size limit');
@@ -95,12 +96,12 @@ async function readImageBody(body) {
     return buffer;
   }
 
-  throw new Error('S3 returned an unsupported image body');
+  throw new Error('Storage returned an unsupported image body');
 }
 
 export function createIssuesRouter({
   poolProvider = getDbPool,
-  imageStorage = s3Storage,
+  imageStorage = getImageStorage(),
 } = {}) {
   const router = Router();
 
@@ -314,7 +315,7 @@ export function createIssuesRouter({
       });
       return res.status(200).end(content);
     } catch (error) {
-      if (isMissingS3Object(error)) {
+      if (isMissingImage(error)) {
         return res.status(404).json({ error: 'Issue image not found' });
       }
       console.error('Get issue image failed:', error.message);

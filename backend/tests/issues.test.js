@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import express from 'express';
 import {
@@ -8,6 +11,8 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { createIssuesRouter } from '../routes/issues.js';
+import { getImageStorage } from '../services/imageStorage.js';
+import { createLocalStorage, localStorage } from '../services/localStorage.js';
 import { createS3Storage } from '../services/s3Storage.js';
 
 const validPng = Buffer.from(
@@ -121,11 +126,11 @@ async function postImage(bytes = validPng, { role = 'student', userId = '17' } =
   });
 }
 
-async function getImage({ role, userId = '17' } = {}) {
+async function getImage({ role, userId = '17', id = '7' } = {}) {
   const headers = {};
   if (role) headers['X-Test-Role'] = role;
   if (role) headers['X-Test-User-Id'] = userId;
-  return fetch(`${baseUrl}/7/image`, { headers });
+  return fetch(`${baseUrl}/${id}/image`, { headers });
 }
 
 beforeEach(async () => {
@@ -330,6 +335,37 @@ test('image retrieval returns 404 when the private object is missing', async () 
   };
   const response = await getImage({ role: 'student', userId: '17' });
   assert.equal(response.status, 404);
+});
+
+test('local provider stores and serves complaint images without using S3', async () => {
+  const storageDir = await mkdtemp(join(tmpdir(), 'campusfix-local-storage-'));
+  Object.assign(storage, createLocalStorage({ storageDir }));
+
+  try {
+    assert.equal(getImageStorage('local'), localStorage);
+    const upload = await postImage();
+    assert.equal(upload.status, 201);
+    assert.match(state.issues[0].image_key, /^complaints\/[0-9a-f-]{36}\.png$/);
+
+    const response = await getImage({ role: 'admin', userId: '42', id: '8' });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), validPng);
+  } finally {
+    await rm(storageDir, { recursive: true, force: true });
+  }
+});
+
+test('local storage rejects path traversal keys', async () => {
+  const storageDir = await mkdtemp(join(tmpdir(), 'campusfix-local-storage-'));
+  const local = createLocalStorage({ storageDir });
+
+  try {
+    await assert.rejects(local.getImage('../outside.png'), /Invalid local image key/);
+    await assert.rejects(local.deleteImage('complaints/..\\outside.png'), /Invalid local image key/);
+  } finally {
+    await rm(storageDir, { recursive: true, force: true });
+  }
 });
 
 test('the S3 service sends put, get, and delete commands through an injected client', async () => {

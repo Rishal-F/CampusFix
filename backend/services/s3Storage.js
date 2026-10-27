@@ -1,10 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
 
 const extensionsByContentType = {
   'image/jpeg': 'jpg',
@@ -19,8 +13,9 @@ export function createS3Storage({
 } = {}) {
   let s3Client = client;
 
-  function getClient() {
+  async function getClient() {
     if (!s3Client) {
+      const { S3Client } = await import('@aws-sdk/client-s3');
       s3Client = new S3Client({
         region: region || process.env.AWS_REGION || 'ap-south-1',
       });
@@ -45,7 +40,11 @@ export function createS3Storage({
 
       const bucket = getBucketName();
       const key = `complaints/${randomUUID()}.${extension}`;
-      await getClient().send(new PutObjectCommand({
+      const [{ PutObjectCommand }, s3] = await Promise.all([
+        import('@aws-sdk/client-s3'),
+        getClient(),
+      ]);
+      await s3.send(new PutObjectCommand({
         Bucket: bucket,
         Key: key,
         Body: buffer,
@@ -56,7 +55,11 @@ export function createS3Storage({
 
     async getImage(key) {
       const bucket = getBucketName();
-      return getClient().send(new GetObjectCommand({
+      const [{ GetObjectCommand }, s3] = await Promise.all([
+        import('@aws-sdk/client-s3'),
+        getClient(),
+      ]);
+      return s3.send(new GetObjectCommand({
         Bucket: bucket,
         Key: key,
       }));
@@ -64,7 +67,11 @@ export function createS3Storage({
 
     async deleteImage(key) {
       const bucket = getBucketName();
-      await getClient().send(new DeleteObjectCommand({
+      const [{ DeleteObjectCommand }, s3] = await Promise.all([
+        import('@aws-sdk/client-s3'),
+        getClient(),
+      ]);
+      await s3.send(new DeleteObjectCommand({
         Bucket: bucket,
         Key: key,
       }));

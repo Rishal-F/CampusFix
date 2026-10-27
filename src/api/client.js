@@ -3,12 +3,13 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request(path, options = {}, expectedStatus) {
   let response;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...options,
       credentials: 'include',
       headers: {
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers,
       },
     });
@@ -34,6 +35,27 @@ async function request(path, options = {}, expectedStatus) {
   return data;
 }
 
+async function requestImage(path) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      credentials: 'include',
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('Cannot connect to CampusFix server. Please check that the backend is running.');
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `Request failed (${response.status})`);
+  }
+
+  return response.blob();
+}
+
 export const api = {
   me: () => request('/auth/me'),
 
@@ -55,6 +77,9 @@ export const api = {
   listIssues: () => request('/issues'),
 
   getIssue: (id) => request(`/issues/${encodeURIComponent(id)}`),
+
+  getIssueImage: (id) =>
+    requestImage(`/issues/${encodeURIComponent(id)}/image`),
 
   updateIssuePriority: (id, priority) =>
     request(`/admin/issues/${encodeURIComponent(id)}/priority`, {
@@ -86,9 +111,25 @@ export const api = {
       body: JSON.stringify({ assigneeId }),
     }),
 
-  createIssue: (issue) =>
-    request('/issues', {
+  createIssue: (issue) => {
+    if (!issue.image) {
+      const fields = Object.fromEntries(
+        Object.entries(issue).filter(([key]) => key !== 'image'),
+      );
+      return request('/issues', {
+        method: 'POST',
+        body: JSON.stringify(fields),
+      });
+    }
+
+    const formData = new FormData();
+    Object.entries(issue).forEach(([key, value]) => {
+      if (key !== 'image' && value != null) formData.append(key, String(value));
+    });
+    formData.append('image', issue.image);
+    return request('/issues', {
       method: 'POST',
-      body: JSON.stringify(issue),
-    }),
+      body: formData,
+    });
+  },
 };

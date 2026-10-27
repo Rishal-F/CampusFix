@@ -69,6 +69,7 @@ function ReportForm({ onCancel, onCreated }) {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Electrical');
   const [location, setLocation] = useState('');
+  const [image, setImage] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -78,7 +79,7 @@ function ReportForm({ onCancel, onCreated }) {
     setError('');
 
     try {
-      await api.createIssue({ title, description, category, location });
+      await api.createIssue({ title, description, category, location, image });
       await onCreated();
     } catch (err) {
       setError(err.message || 'Could not submit the issue');
@@ -140,6 +141,16 @@ function ReportForm({ onCancel, onCreated }) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe the issue and where it occurs."
+            style={formInput}
+          />
+        </label>
+
+        <label>
+          Optional photo (JPEG, PNG, or WebP; maximum 5 MB)
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => setImage(event.target.files?.[0] || null)}
             style={formInput}
           />
         </label>

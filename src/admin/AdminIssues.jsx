@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IssueImage } from "../components/IssueImage";
 
 const STATUSES = [
   ["reported", "Reported"],
@@ -23,17 +24,6 @@ function formatStatus(status) {
 function formatDate(date) {
   const parsed = new Date(date);
   return Number.isNaN(parsed.getTime()) ? "Unknown date" : parsed.toLocaleString();
-}
-
-function sameOriginImageUrl(imageKey) {
-  if (typeof imageKey !== "string" || !imageKey.trim()) return null;
-
-  try {
-    const url = new URL(imageKey, window.location.origin);
-    return url.origin === window.location.origin ? url.href : null;
-  } catch {
-    return null;
-  }
 }
 
 export default function AdminIssues({
@@ -391,11 +381,11 @@ export default function AdminIssues({
               </p>
             </div>
 
-            {sameOriginImageUrl(selectedIssue.image_key) && (
+            {selectedIssue.has_image && (
               <figure className="my-5">
                 <figcaption className="mb-2 text-xs font-semibold text-slate-700">Issue image</figcaption>
-                <img
-                  src={sameOriginImageUrl(selectedIssue.image_key)}
+                <IssueImage
+                  issueId={selectedIssue.id}
                   alt={`Image attached to issue ${selectedIssue.id}`}
                   className="max-h-80 w-full rounded-lg border border-[#deded9] object-contain"
                 />

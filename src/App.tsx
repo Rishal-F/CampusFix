@@ -101,6 +101,9 @@ export function App() {
   }, [authChecked, route, user]);
 
   const isAdminRoute = route === '/admin' || route.startsWith('/admin/');
+  const isStudentRoute = route === '/report'
+    || route === '/reports'
+    || route.startsWith('/reports/');
   const requiresAuth = route === '/report'
     || route === '/reports'
     || route.startsWith('/reports/')
@@ -121,7 +124,9 @@ export function App() {
     }} />;
   }
 
-  const page = route === '/dashboard'
+  const page = isStudentRoute && user?.role !== 'student'
+    ? <AccessDeniedPage />
+    : route === '/dashboard'
     ? user?.role === 'student'
       ? <StudentDashboard user={user} onLogout={handleLogout} />
       : user?.role === 'admin'

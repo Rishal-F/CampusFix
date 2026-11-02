@@ -1,0 +1,25 @@
+:root {
+  --navy-950: #182033;
+  --navy-800: #263149;
+  --navy-600: #62708a;
+  --navy-400: #98a2b5;
+  --violet-700: #22252a;
+  --violet-600: #111318;
+  --violet-100: #eef0f2;
+  --surface: #ffffff;
+  --canvas: #f4f4f1;
+  --line: #e7e9f0;
+  --line-strong: #dfe2eb;
+  --green: #23815a;
+  --green-soft: #e9f7f0;
+  --amber: #a86d15;
+  --amber-soft: #fff5df;
+  --blue: #3f6ea8;
+  --blue-soft: #eaf2fd;
+  --shadow-sm: 0 2px 8px rgba(24, 32, 51, .035);
+  --shadow-md: 0 12px 30px rgba(24, 32, 51, .045);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --sidebar-width: 248px;
+}

@@ -1,0 +1,280 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-heading: 'HelveticaNowDisplay-Medium', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'HelveticaNowDisplayW01-Rg', 'Helvetica Neue', Arial, sans-serif;
+  --color-ink: #182033;
+  --color-muted: #62708a;
+  --color-accent: #111318;
+  --color-accent-dark: #000000;
+  --color-canvas: #f4f4f1;
+  --color-surface: #fffefa;
+  --color-line: #deded9;
+  --color-soft: #ecece8;
+  --space-page: 2rem;
+  --radius-card: 1rem;
+  --radius-pill: 999px;
+  --shadow-card: 0 2px 8px rgb(24 32 51 / 3.5%);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+@keyframes blink {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@layer utilities {
+  .animate-blink {
+    animation: blink 1s step-end infinite;
+  }
+}
+
+@layer components {
+  .campus-product-shell {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  /* Product routes share the landing page's restrained, monochrome language. */
+  .campus-product-shell {
+    background: #f4f4f1 !important;
+    color: #111318 !important;
+    font-family: var(--font-body);
+  }
+
+  .campus-product-shell .campus-product-sidebar,
+  .campus-product-shell .campus-product-header {
+    background: rgb(255 254 250 / 94%) !important;
+    border-color: #deded9 !important;
+  }
+
+  .campus-product-shell .campus-product-sidebar {
+    box-shadow: none !important;
+  }
+
+  .campus-product-shell .campus-product-logo {
+    color: #111318 !important;
+    font-family: var(--font-heading) !important;
+  }
+
+  .campus-product-shell .campus-logo-mark {
+    color: #111318 !important;
+  }
+
+  .campus-product-shell .campus-pill-button {
+    border-radius: 999px !important;
+    box-shadow: none !important;
+  }
+
+  .campus-product-shell .campus-pill-button:not(.campus-pill-button--secondary),
+  .campus-product-shell [class*="bg-[#7257dd]"],
+  .campus-product-shell [class*="bg-[#5d45cc]"] {
+    background: #111318 !important;
+    color: #fffefa !important;
+  }
+
+  .campus-product-shell .campus-pill-button:not(.campus-pill-button--secondary):hover,
+  .campus-product-shell [class*="hover:bg-[#5d45cc]"]:hover {
+    background: #000 !important;
+  }
+
+  .campus-product-shell [class*="text-[#7257dd]"],
+  .campus-product-shell [class*="text-[#5d45cc]"],
+  .campus-product-shell [class*="text-[#5342a5]"] {
+    color: #111318 !important;
+  }
+
+  .campus-product-shell [class*="bg-[#eeeaff]"],
+  .campus-product-shell [class*="bg-[#f1efff]"],
+  .campus-product-shell [class*="bg-[#f8f7ff]"] {
+    background: #ecece8 !important;
+  }
+
+  .campus-product-shell [class*="border-[#e9e5ff]"] {
+    border-color: #deded9 !important;
+  }
+
+  .campus-product-shell .campus-status {
+    border-color: #cfcfca !important;
+    background: #ecece8 !important;
+    color: #111318 !important;
+  }
+
+  .campus-product-shell .campus-product-sidebar a,
+  .campus-product-shell .campus-product-header,
+  .campus-product-shell h1,
+  .campus-product-shell h2,
+  .campus-product-shell h3,
+  .campus-product-shell strong {
+    font-family: var(--font-body);
+  }
+
+  .campus-product-shell h1,
+  .campus-product-shell h2,
+  .campus-product-shell h3,
+  .campus-product-shell .campus-product-logo {
+    font-family: var(--font-heading);
+  }
+
+  .campus-product-shell input,
+  .campus-product-shell select,
+  .campus-product-shell textarea {
+    border-color: #deded9 !important;
+    background: #fffefa !important;
+    color: #111318 !important;
+  }
+
+  .campus-product-shell input:focus,
+  .campus-product-shell select:focus,
+  .campus-product-shell textarea:focus {
+    border-color: #111318 !important;
+    box-shadow: 0 0 0 3px rgb(17 19 24 / 8%) !important;
+  }
+
+  .campus-product-shell [class*="rounded-xl"][class*="bg-white"],
+  .campus-product-shell article {
+    border-color: #deded9 !important;
+    background: #fffefa !important;
+    box-shadow: 0 2px 8px rgb(24 32 51 / 3.5%) !important;
+  }
+
+  .campus-product-shell table th {
+    color: #74746f !important;
+  }
+
+  .campus-product-shell table td {
+    border-color: #ecece8 !important;
+  }
+
+  .campus-product-shell .campus-product-sidebar,
+  .campus-product-shell .campus-product-header {
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    border-color: var(--color-line);
+  }
+
+  .campus-product-logo {
+    color: var(--color-ink);
+    letter-spacing: -0.04em;
+  }
+
+  .campus-logo-mark {
+    color: var(--color-ink);
+    font-size: 1.35em;
+    letter-spacing: -0.04em;
+  }
+
+  .campus-product-shell [class*="bg-[#7257dd]"],
+  .campus-product-shell [class*="bg-[#5d45cc]"] {
+    background-color: var(--color-accent);
+  }
+
+  .campus-product-shell [class*="hover:bg-[#5d45cc]"]:hover {
+    background-color: var(--color-accent-dark);
+  }
+
+  .campus-product-shell [class*="text-[#7257dd]"],
+  .campus-product-shell [class*="text-[#5d45cc]"],
+  .campus-product-shell [class*="text-[#5342a5]"] {
+    color: var(--color-accent);
+  }
+
+  .campus-product-shell [class*="bg-[#eeeaff]"],
+  .campus-product-shell [class*="bg-[#f1efff]"],
+  .campus-product-shell [class*="bg-[#f8f7ff]"] {
+    background-color: var(--color-soft);
+  }
+
+  .campus-product-shell [class*="border-[#e9e5ff]"] {
+    border-color: var(--color-line);
+  }
+
+  .campus-product-shell [class*="shadow-[#7257dd]"] {
+    --tw-shadow-color: rgb(17 19 24 / 12%);
+  }
+
+  .campus-pill-button {
+    border: 1px solid transparent;
+    box-shadow: none;
+  }
+
+  .campus-pill-button:not(.campus-pill-button--secondary) {
+    background: var(--color-accent);
+  }
+
+  .campus-pill-button:not(.campus-pill-button--secondary):hover {
+    background: var(--color-accent-dark);
+  }
+
+  .campus-pill-button--secondary {
+    border-color: var(--color-line);
+    color: var(--color-ink);
+  }
+
+  .campus-product-shell input,
+  .campus-product-shell select,
+  .campus-product-shell textarea {
+    border-color: var(--color-line);
+    background: var(--color-surface);
+    border-radius: 0.65rem;
+  }
+
+  .campus-product-shell input:focus,
+  .campus-product-shell select:focus,
+  .campus-product-shell textarea:focus {
+    border-color: var(--color-ink);
+    box-shadow: 0 0 0 3px rgb(17 19 24 / 8%);
+  }
+
+  .campus-status {
+    border: 1px solid var(--color-line);
+    background: var(--color-soft);
+    color: var(--color-ink);
+  }
+
+  .campus-product-shell table th {
+    color: #74746f;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+  }
+
+  .campus-product-shell table td {
+    border-color: var(--color-soft);
+  }
+
+  .campus-product-shell article,
+  .campus-product-shell [class*="rounded-xl"][class*="bg-white"] {
+    border-color: var(--color-line);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  @media (max-width: 767px) {
+    .campus-product-shell .campus-product-header {
+      min-height: 74px;
+    }
+  }
+}
